@@ -1,1 +1,5 @@
-# SQLAlchemy models will be imported here so Alembic can detect them.
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    pass
