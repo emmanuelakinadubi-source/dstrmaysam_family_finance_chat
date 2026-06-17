@@ -31,9 +31,9 @@ services:
     image: postgres:16
     container_name: family_finance_db
     environment:
-      POSTGRES_DB: family_finance
+      POSTGRES_DB: family_expense
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: adubi1214
     ports:
       - "5432:5432"
     volumes:
