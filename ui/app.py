@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-
+# initial
 st.set_page_config(page_title="Family Finance Chat App", layout="wide")
 
 st.title("Family Finance Chat App")
