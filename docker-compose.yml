@@ -10,8 +10,8 @@ services:
       - "8000:8000"
     volumes:
       - ./api:/app/api
-    depends_on:
-      - db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   ui:
     build:
@@ -26,18 +26,5 @@ services:
       - ./ui:/app/ui
     depends_on:
       - api
-
-  db:
-    image: postgres:16
-    container_name: family_finance_db
-    environment:
-      POSTGRES_DB: family_finance
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-
-volumes:
-  pg_data:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
