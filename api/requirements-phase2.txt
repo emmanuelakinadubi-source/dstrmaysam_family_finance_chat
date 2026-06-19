@@ -1,0 +1,14 @@
+# Phase 2 — install separately when needed, not part of the MVP Docker build
+# Install with: pip install -r requirements-phase2.txt
+
+# LLM Evaluation
+ragas>=0.2.0
+datasets>=2.0.0
+
+# Observability
+langfuse>=2.44.0
+mlflow>=2.15.0
+
+# Reporting
+reportlab==4.2.4
+xlsxwriter==3.2.0

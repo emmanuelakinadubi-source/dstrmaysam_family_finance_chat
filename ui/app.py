@@ -1,32 +1,38 @@
 import streamlit as st
-import requests
-# initial
-st.set_page_config(page_title="Family Finance Chat App", layout="wide")
 
-st.title("Family Finance Chat App")
-st.write("Monthly budgeting and contribution planner")
+st.set_page_config(
+    page_title="Company Event Budgeting & Vendor AI",
+    page_icon="🏢",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-with st.sidebar:
-    st.header("Month Setup")
-    month = st.selectbox("Month", [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-    ])
-    year = st.number_input("Year", min_value=2024, max_value=2100, value=2026)
+st.title("🏢 Company Event Budgeting & Vendor Recommendation System")
 
-st.subheader("Income")
-col1, col2 = st.columns(2)
-with col1:
-    husband_income = st.number_input("Husband income (£)", min_value=0.0, step=100.0)
-with col2:
-    wife_income = st.number_input("Wife income (£)", min_value=0.0, step=100.0)
+st.markdown("""
+### MVP — End-to-End Company Event Workflow
 
-if st.button("Calculate"):
-    total_income = husband_income + wife_income
-    st.success(f"Total household income: £{total_income:,.2f}")
+| Page | Description | Status |
+|---|---|---|
+| 📊 Dashboard | Overview of events, budgets and vendors | ✅ Active |
+| 📤 Upload | Upload event plan → AI extracts details | ✅ Active |
+| 🏪 Vendors | Vendor recommendations & AI reasoning | ✅ Active |
+| 💬 Chat | Ask questions about uploaded event docs | ✅ Active |
+| 🏠 Family Budget | Household budgeting module | 🔒 Phase 2 |
+| 📈 Reports | Analytics & historical reports | 🔒 Phase 2 |
+""")
 
-    try:
-        health = requests.get("http://api:8000/api/health", timeout=5)
-        st.info(f"API status: {health.json()}")
-    except Exception:
-        st.warning("API is not reachable yet.")
+st.info(
+    "**Getting started:** Use the sidebar to navigate. "
+    "Start by uploading an event plan on the **Upload** page."
+)
+
+try:
+    from ui.services.api_client import get_health
+    health = get_health()
+    st.sidebar.success(f"API: {health.get('status', 'ok')}")
+except Exception:
+    st.sidebar.warning("⚠️ API not reachable — start Docker services")
+
+st.sidebar.divider()
+st.sidebar.caption("Family Budget and Reports modules are available but disabled in this MVP phase.")

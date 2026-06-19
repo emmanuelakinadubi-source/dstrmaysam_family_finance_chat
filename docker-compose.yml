@@ -1,4 +1,31 @@
 services:
+  db:
+    image: postgres:16
+    container_name: family_finance_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-family_finance}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: family_finance_chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - ALLOW_RESET=true
+
   api:
     build:
       context: .
@@ -10,6 +37,12 @@ services:
       - "8000:8000"
     volumes:
       - ./api:/app/api
+      - uploads_data:/app/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -28,3 +61,8 @@ services:
       - api
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:
+  chroma_data:
+  uploads_data:
