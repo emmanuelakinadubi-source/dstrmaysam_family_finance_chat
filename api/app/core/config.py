@@ -3,25 +3,23 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    app_name: str = "Family Finance AI Platform"
+    app_name: str = "Event Intelligence Platform"
     debug: bool = True
     secret_key: str = "change-me-in-production"
 
     # Database
     database_url: str = "postgresql://postgres:postgres@db:5432/family_finance"
 
-    # ChromaDB
-    chroma_host: str = "chromadb"
-    chroma_port: int = 8000
-    chroma_collection_family: str = "family_finance"
-    chroma_collection_company: str = "company_events"
+    # Azure OpenAI (our RAG pipeline)
+    azure_openai_api_key: str = ""
+    azure_openai_endpoint: str = ""
+    azure_openai_api_version: str = "2024-12-01-preview"
+    azure_openai_deployment: str = "gpt-4.1-mini"
+    azure_openai_embedding_deployment: str = "text-embedding-3-small"
 
-    # LLM
-    llm_provider: str = "openai"
-    openai_api_key: str = ""
-    openai_model: str = "gpt-4o-mini"
-    anthropic_api_key: str = ""
-    anthropic_model: str = "claude-haiku-4-5-20251001"
+    # ChromaDB — local persistent storage
+    chroma_persist_dir: str = "/app/chroma_db"
+    canvas_api_url: str = "https://www.canvas-events.co.uk/api/venues"
 
     # Observability
     langfuse_public_key: str = ""

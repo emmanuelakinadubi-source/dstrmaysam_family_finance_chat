@@ -16,16 +16,6 @@ services:
       timeout: 5s
       retries: 5
 
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: family_finance_chromadb
-    ports:
-      - "8001:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
-    environment:
-      - ALLOW_RESET=true
-
   api:
     build:
       context: .
@@ -33,16 +23,17 @@ services:
     container_name: family_finance_api
     env_file:
       - .env
+    environment:
+      - CHROMA_PERSIST_DIR=/app/chroma_db
     ports:
       - "8000:8000"
     volumes:
       - ./api:/app/api
+      - chroma_data:/app/chroma_db
       - uploads_data:/app/data/uploads
     depends_on:
       db:
         condition: service_healthy
-      chromadb:
-        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
