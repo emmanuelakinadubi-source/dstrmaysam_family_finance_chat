@@ -7,6 +7,7 @@ python-dotenv==1.0.1
 sqlalchemy==2.0.32
 psycopg2-binary==2.9.9
 alembic==1.13.2
+python-multipart>=0.0.9
 
 # UI
 streamlit==1.37.1
@@ -17,11 +18,19 @@ numpy
 plotly==5.23.0
 matplotlib==3.9.2
 
-# Future AI / analytics
+# AI / RAG
 langchain==0.3.25
 langchain-openai==0.2.14
 langchain-community==0.3.25
+langchain-text-splitters>=0.3.0
 langfuse==2.44.0
 mlflow==2.15.1
 chromadb==0.5.5
 tiktoken==0.7.0
+
+# Document parsing
+pypdf>=4.3.1
+python-docx>=1.1.2
+
+# Scheduling
+apscheduler>=3.10.4
