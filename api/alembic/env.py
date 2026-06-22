@@ -8,7 +8,14 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.db.base import Base
-from app.models import budget  # noqa: F401 — registers models with Base.metadata
+# Import all models so Alembic can detect them
+from app.models import budget   # noqa: F401
+from app.models import vendor   # noqa: F401
+from app.models import event    # noqa: F401
+from app.models import upload   # noqa: F401
+from app.models import chat     # noqa: F401
+from app.models import report   # noqa: F401
+from app.models import audit    # noqa: F401
 
 config = context.config
 
@@ -21,7 +28,7 @@ target_metadata = Base.metadata
 def get_url() -> str:
     return os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:adubi1214@localhost:5432/family_expense",
+        "postgresql://postgres:postgres@localhost:5432/family_finance",
     )
 
 
