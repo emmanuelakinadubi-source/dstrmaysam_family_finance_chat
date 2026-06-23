@@ -89,6 +89,23 @@ def match_vendors(data: VendorMatchRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/crawl")
-def trigger_crawl(background_tasks: BackgroundTasks):
+def trigger_crawl(background_tasks: BackgroundTasks, foreground: bool = False):
+    """
+    Trigger a vendor + hotel scrape.
+    - foreground=false (default): runs in background, returns immediately.
+    - foreground=true: blocks until complete and returns full result summary.
+    """
+    if foreground:
+        return run_crawl()
     background_tasks.add_task(run_crawl)
-    return {"message": "Vendor crawl started in background"}
+    return {"message": "Vendor crawl started in background — check logs for progress"}
+
+
+@router.get("/crawl/schedule")
+def crawl_schedule():
+    """Return next scheduled run times for all background jobs."""
+    from app.services.scheduler import get_next_run_time
+    return {
+        "daily_venue_indexing": get_next_run_time("daily_venue_indexing"),
+        "weekly_vendor_crawl": get_next_run_time("weekly_vendor_crawl"),
+    }

@@ -67,6 +67,7 @@ class RecommendationSummary(BaseModel):
 
 
 class EventUploadResponse(BaseModel):
+    event_id: Optional[str] = None
     event_requirements: EventRequirements
     recommended_venues: List[VenueCard]
     summary: RecommendationSummary

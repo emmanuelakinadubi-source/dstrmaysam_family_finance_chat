@@ -2,9 +2,12 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
 from app.agent.event_agent import process_event_requirements
+from app.core.database import get_db
+from app.modules.events import repository as repo
 from app.schemas.event import (
     EventRequirements,
     EventUploadResponse,
@@ -29,6 +32,7 @@ _ALLOWED_EXT = {".pdf", ".doc", ".docx"}
 async def upload_event(
     file: Optional[UploadFile] = File(default=None),
     text: Optional[str] = Form(default=None),
+    db: Session = Depends(get_db),
 ):
     if not file and not text:
         raise HTTPException(status_code=400, detail="Provide a file or text input.")
@@ -73,6 +77,24 @@ async def upload_event(
     errors = validate_event_requirements(requirements)
     if errors:
         raise HTTPException(status_code=422, detail={"validation_errors": errors})
+
+    # Persist event to PostgreSQL (non-fatal)
+    event_id = None
+    try:
+        city = req_data.get("city", "")
+        date = req_data.get("event_date", "")
+        db_payload = {
+            "event_name": f"Event – {city} {date}".strip(" –"),
+            "city": city,
+            "event_date": date,
+            "event_time": req_data.get("event_time"),
+            "attendee_count": int(req_data.get("attendees", 0) or 0),
+            "budget": float(req_data.get("max_budget") or req_data.get("min_budget") or 0),
+        }
+        event = repo.create_event(db, db_payload)
+        event_id = str(event.id)
+    except Exception as exc:
+        logger.warning("DB persistence failed (non-fatal): %s", exc)
 
     # Index the event requirements for Chat-based querying
     event_collection = "event_management"
@@ -133,6 +155,7 @@ async def upload_event(
         summary = _empty_summary()
 
     return EventUploadResponse(
+        event_id=event_id,
         event_requirements=requirements,
         recommended_venues=venue_cards,
         summary=summary,
