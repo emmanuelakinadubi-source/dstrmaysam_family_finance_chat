@@ -16,6 +16,22 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     from app.services.scheduler import shutdown_scheduler, start_scheduler
 
+    # Create all tables if they don't exist (safe — never drops existing data)
+    try:
+        from app.core.database import engine
+        from app.db.base import Base
+        import app.models.budget  # noqa: F401
+        import app.models.vendor  # noqa: F401
+        import app.models.event   # noqa: F401
+        import app.models.upload  # noqa: F401
+        import app.models.chat    # noqa: F401
+        import app.models.report  # noqa: F401
+        import app.models.audit   # noqa: F401
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables verified / created")
+    except Exception as exc:
+        logger.warning("Table creation skipped: %s", exc)
+
     # Seed vendors on startup (non-fatal if DB not available)
     try:
         from app.core.database import SessionLocal
