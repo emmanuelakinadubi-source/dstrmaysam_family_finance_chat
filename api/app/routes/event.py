@@ -55,11 +55,21 @@ async def upload_event(
     if check_prompt_injection(raw_text):
         raise HTTPException(status_code=400, detail="Submission contains disallowed content.")
 
-    # Lazy-index venues on first request
-    _ensure_venues_indexed()
+    # Lazy-index venues on first request (non-fatal — skipped if credentials missing)
+    try:
+        _ensure_venues_indexed()
+    except Exception as exc:
+        logger.warning("Venue indexing skipped (non-fatal): %s", exc)
 
     # Run single agent: extract + recommend
-    agent_result = process_event_requirements(raw_text)
+    try:
+        agent_result = process_event_requirements(raw_text)
+    except Exception as exc:
+        logger.error("Agent failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI agent error — check that AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT are set in .env. Details: {exc}",
+        )
 
     # Build EventRequirements from agent output
     req_data = agent_result.get("event_requirements") or {}
