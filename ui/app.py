@@ -4,7 +4,7 @@ import streamlit as st
 API_BASE = "http://api:8000"
 
 st.set_page_config(
-    page_title="Event Intelligence Platform",
+    page_title="Event Manager",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -181,7 +181,7 @@ if "index_stats" not in st.session_state:
 
 tab_index, tab_events, tab_chat = st.tabs([
     "📦 Indexing",
-    "🏢 Corporate Event Management",
+    "🏢 Event Manager",
     "💬 Chat",
 ])
 
@@ -280,7 +280,7 @@ with tab_index:
 # TAB 2 – CORPORATE EVENT MANAGEMENT
 # ════════════════════════════════════════════════════════════════
 with tab_events:
-    st.title("Corporate Event Management")
+    st.title("Event Manager")
     st.write(
         "Submit your event requirements to receive AI-powered venue recommendations. "
         "Your event will also be indexed so you can ask questions in the **Chat** tab."
@@ -389,7 +389,7 @@ with tab_events:
 # TAB 3 – CHAT
 # ════════════════════════════════════════════════════════════════
 with tab_chat:
-    st.title("AI Event Intelligence Chat")
+    st.title("Event Manager Chat")
     st.write("Chat with the venue knowledge base or your uploaded event requirements.")
 
     # ── Knowledge Source Selector ─────────────────────────────────────────────
@@ -426,7 +426,7 @@ with tab_chat:
         else:
             st.warning(
                 "No event requirements indexed yet. "
-                "Go to **Corporate Event Management** and submit your event brief first, "
+                "Go to **Event Manager** and submit your event brief first, "
                 "then return here to ask questions about your specific event."
             )
 

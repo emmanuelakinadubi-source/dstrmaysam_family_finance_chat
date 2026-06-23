@@ -27,7 +27,7 @@ def _query_event_fn(query: str, collection: str = "event_management") -> str:
                 "collection": collection,
                 "message": (
                     "No event requirements found in this collection. "
-                    "Please go to Corporate Event Management and upload your event brief first."
+                    "Please go to Event Manager and upload your event brief first."
                 ),
             })
 
@@ -59,7 +59,7 @@ search_event_requirements = StructuredTool.from_function(
         "Search the event requirements knowledge base to retrieve details about the user's event. "
         "Use this when knowledge_source is 'event_management' or 'event_request_*'. "
         "Returns: city, attendees, budget, date, additional requirements from the indexed event brief. "
-        "If results are empty, inform the user to upload requirements via Corporate Event Management. "
+        "If results are empty, inform the user to upload requirements via Event Manager. "
         "After retrieving event requirements, call recommend_venues or find_nearby_venues for venue matching."
     ),
     args_schema=EventQueryInput,

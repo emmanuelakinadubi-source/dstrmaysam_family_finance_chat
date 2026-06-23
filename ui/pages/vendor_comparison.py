@@ -64,12 +64,48 @@ with tab2:
 
 # ── Tab 3: Data Refresh ────────────────────────────────────────────────────────
 with tab3:
-    st.subheader("Vendor Data Ingestion")
-    st.info("The scheduler runs vendor price ingestion daily at 06:00 AM. You can also trigger it manually.")
+    st.subheader("Vendor & Hotel Data Refresh")
+    st.markdown(
+        "Vendor and hotel data is scraped from **OpenStreetMap** for 7 UK cities "
+        "(London, Manchester, Birmingham, Edinburgh, Bristol, Leeds, Glasgow). "
+        "The scheduled crawl runs automatically every **Sunday at 02:00 UTC**."
+    )
 
-    if st.button("🔄 Run Vendor Crawl Now", type="primary"):
-        try:
-            result = api.trigger_vendor_crawl()
-            st.success(result.get("message", "Crawl started"))
-        except Exception as e:
-            st.error(f"Error: {e}")
+    # Show next scheduled runs
+    try:
+        schedule = api._get("/vendors/crawl/schedule")
+        c1, c2 = st.columns(2)
+        c1.metric("Next venue indexing", schedule.get("daily_venue_indexing", "unknown")[:19])
+        c2.metric("Next vendor crawl", schedule.get("weekly_vendor_crawl", "unknown")[:19])
+    except Exception:
+        pass
+
+    st.divider()
+    col_bg, col_fg = st.columns(2)
+
+    with col_bg:
+        st.caption("Starts crawl in background — returns immediately")
+        if st.button("▶ Run in Background", use_container_width=True):
+            try:
+                result = api.trigger_vendor_crawl()
+                st.success(result.get("message", "Crawl started"))
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    with col_fg:
+        st.caption("Blocks until complete — shows full result summary")
+        if st.button("⏳ Run & Wait for Result", type="primary", use_container_width=True):
+            with st.spinner("Scraping hotels and caterers for 7 UK cities — this takes ~2 minutes…"):
+                try:
+                    result = api._post("/vendors/crawl?foreground=true", {})
+                    if result.get("status") == "ok":
+                        st.success("Crawl complete")
+                        m1, m2, m3, m4 = st.columns(4)
+                        m1.metric("New vendors", result.get("vendors_new", 0))
+                        m2.metric("Updated vendors", result.get("vendors_updated", 0))
+                        m3.metric("New prices", result.get("prices_new", 0))
+                        m4.metric("Updated prices", result.get("prices_updated", 0))
+                    else:
+                        st.error(f"Crawl error: {result.get('error')}")
+                except Exception as e:
+                    st.error(f"Error: {e}")

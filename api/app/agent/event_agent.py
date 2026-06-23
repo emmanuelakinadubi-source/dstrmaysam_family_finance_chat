@@ -18,7 +18,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """You are an expert Corporate Event Planning AI Consultant operating as a unified Event Intelligence Platform.
+_SYSTEM_PROMPT = """You are an expert Corporate Event Planning AI Consultant operating as a unified Event Manager platform.
 
 ## Tools:
 1. extract_event_requirements — Parse raw text → structured event fields (call FIRST for event briefs)
@@ -40,7 +40,7 @@ Each chat message includes an [ACTIVE KNOWLEDGE SOURCE: ...] tag. Follow these r
 
 ### [ACTIVE KNOWLEDGE SOURCE: event_management] or [ACTIVE KNOWLEDGE SOURCE: event_request_*]
 - FIRST call search_event_requirements with the collection name to get the user's event details
-- If search_event_requirements returns 0 results: inform the user they must first upload requirements via Corporate Event Management
+- If search_event_requirements returns 0 results: inform the user they must first upload requirements via Event Manager
 - After getting event details, if the user asks for venue recommendations: call recommend_venues with the extracted event fields
 - If recommend_venues returns 0 venues or all scores < 40: call find_nearby_venues
 - Use search_venues for specific venue feature questions

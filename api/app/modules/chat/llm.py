@@ -18,7 +18,7 @@ def get_llm():
 
 def build_system_prompt(module: str) -> str:
     base = (
-        "You are an AI assistant for the Family Finance & Company Event Planning platform. "
+        "You are an AI assistant for the Event Manager platform. "
         "Answer clearly and concisely. If you have retrieved context, use it to answer precisely. "
         "Always provide actionable insights where possible."
     )

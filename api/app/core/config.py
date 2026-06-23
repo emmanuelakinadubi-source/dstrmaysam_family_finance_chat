@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    app_name: str = "Event Intelligence Platform"
+    app_name: str = "Event Manager"
     debug: bool = True
     secret_key: str = "change-me-in-production"
 

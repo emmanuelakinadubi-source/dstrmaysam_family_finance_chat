@@ -17,13 +17,6 @@ def _post(path: str, payload: dict) -> Any:
     return r.json()
 
 
-def _post_file(path: str, file_obj) -> Any:
-    files = {"file": (file_obj.name, file_obj.getvalue(), file_obj.type)}
-    r = requests.post(f"{BASE_URL}{path}", files=files, timeout=60)
-    r.raise_for_status()
-    return r.json()
-
-
 # ── Health ─────────────────────────────────────────────────────────────────────
 
 def get_health() -> dict:
@@ -31,11 +24,6 @@ def get_health() -> dict:
 
 
 # ── Events ─────────────────────────────────────────────────────────────────────
-
-def upload_event_plan(file_obj) -> dict:
-    """Upload a document file and run the AI extraction pipeline."""
-    return _post_file("/events/upload", file_obj)
-
 
 def list_events(skip: int = 0, limit: int = 50) -> List[dict]:
     return _get("/events/", {"skip": skip, "limit": limit})
@@ -52,7 +40,6 @@ def get_event_recommendations(event_id: str) -> dict:
 def get_dashboard_stats() -> dict:
     try:
         stats = _get("/events/dashboard/stats")
-        # Add vendor count
         try:
             vendors = list_vendors()
             stats["total_vendors"] = len(vendors)
@@ -61,6 +48,54 @@ def get_dashboard_stats() -> dict:
         return stats
     except Exception:
         return {"total_events": 0, "total_budget": 0.0, "total_vendors": 0, "recent_events": []}
+
+
+# ── Company Events & Budgets ───────────────────────────────────────────────────
+
+def create_event(
+    event_name: str,
+    event_date: str,
+    attendee_count: int,
+    budget: float,
+    venue: str = None,
+    hotel: str = None,
+    food_requirements: str = None,
+    welfare_budget: float = None,
+    location: str = None,
+    special_requirements: str = None,
+) -> dict:
+    return _post("/company/events", {
+        "event_name": event_name,
+        "event_date": event_date,
+        "attendee_count": attendee_count,
+        "budget": budget,
+        "venue": venue,
+        "hotel": hotel,
+        "food_requirements": food_requirements,
+        "welfare_budget": welfare_budget,
+        "location": location,
+        "special_requirements": special_requirements,
+    })
+
+
+def create_company_budget(
+    title: str,
+    total_budget: float,
+    department: str = None,
+    period_start: str = None,
+    period_end: str = None,
+) -> dict:
+    return _post("/company/budgets", {
+        "title": title,
+        "total_budget": total_budget,
+        "department": department,
+        "period_start": period_start,
+        "period_end": period_end,
+    })
+
+
+def list_company_budgets() -> List[dict]:
+    return _get("/company/budgets")
 
 
 # ── Vendors ────────────────────────────────────────────────────────────────────
@@ -72,6 +107,14 @@ def list_vendors(city: str = None, vendor_type: str = None) -> List[dict]:
     if vendor_type:
         params["vendor_type"] = vendor_type
     return _get("/vendors/list", params)
+
+
+def match_vendors(budget: float, attendees: int, vendor_type: str) -> List[dict]:
+    return _post("/vendors/match", {
+        "budget": budget,
+        "attendees": attendees,
+        "vendor_type": vendor_type,
+    })
 
 
 def get_vendor_ai_recommendation(
@@ -112,61 +155,8 @@ def trigger_vendor_crawl() -> dict:
     return _post("/vendors/crawl", {})
 
 
-# ── Event Chat (RAG Agent) ─────────────────────────────────────────────────────
-
-def event_chat(question: str, event_id: str = None, evaluate: bool = False) -> dict:
-    return _post("/event-chat/", {
-        "question": question,
-        "event_id": event_id,
-        "evaluate": evaluate,
-    })
-
-
-# ── General Chat (session-based) ───────────────────────────────────────────────
-
-def send_chat_message(message: str, module: str = "company", session_id: str = None) -> dict:
-    payload = {"message": message, "module": module}
-    if session_id:
-        payload["session_id"] = session_id
-    return _post("/chat/", payload)
-
-
-def list_chat_sessions() -> List[dict]:
-    return _get("/chat/sessions")
-
-
-# ── Family Finance (Phase 2) ───────────────────────────────────────────────────
-
-def calculate_allocation(husband_income: float, wife_income: float, month: str, year: int) -> dict:
-    return _post("/family/calculate", {
-        "husband_income": husband_income, "wife_income": wife_income,
-        "month": month, "year": year,
-    })
-
-
-def create_budget(month: str, year: int, husband_income: float, wife_income: float,
-                  expenses: List[dict] = None, notes: str = None) -> dict:
-    return _post("/family/budgets", {
-        "month": month, "year": year,
-        "husband_income": husband_income, "wife_income": wife_income,
-        "expenses": expenses or [], "notes": notes,
-    })
-
-
-def list_budgets() -> List[dict]:
-    return _get("/family/budgets")
-
-
-def get_budget(budget_id: str) -> dict:
-    return _get(f"/family/budgets/{budget_id}")
-
-
-def add_expense(budget_id: str, category: str, amount: float,
-                description: str = None, vendor: str = None) -> dict:
-    return _post(f"/family/budgets/{budget_id}/expenses", {
-        "category": category, "amount": amount,
-        "description": description, "vendor": vendor,
-    })
+def get_crawl_schedule() -> dict:
+    return _get("/vendors/crawl/schedule")
 
 
 # ── Reports & Analytics ────────────────────────────────────────────────────────
