@@ -1,7 +1,7 @@
 """Agent 5 – Chat Agent.
 
 Answers user questions about venues using RAG: retrieves relevant chunks
-from ChromaDB then passes them as grounded context to the LLM.
+from ChromaDB then passes them as grounded context to the LLM. .....
 """
 from typing import Any, Dict
 
