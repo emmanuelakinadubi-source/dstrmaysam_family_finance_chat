@@ -11,7 +11,7 @@ from app.routes.index import router as index_router
 
 logger = logging.getLogger(__name__)
 
-
+# decorator
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.services.scheduler import shutdown_scheduler, start_scheduler
