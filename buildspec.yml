@@ -1,0 +1,40 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: eu-west-2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - export IMAGE_TAG=$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - export ECR_API=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_API
+      - export ECR_UI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY_UI
+
+  build:
+    commands:
+      - echo Building API image...
+      - docker build -t $ECR_API:latest -t $ECR_API:$IMAGE_TAG -f api/Dockerfile .
+      - echo Building UI image...
+      - docker build -t $ECR_UI:latest -t $ECR_UI:$IMAGE_TAG -f ui/Dockerfile .
+
+  post_build:
+    commands:
+      - echo Pushing API image...
+      - docker push $ECR_API:latest
+      - docker push $ECR_API:$IMAGE_TAG
+      - echo Pushing UI image...
+      - docker push $ECR_UI:latest
+      - docker push $ECR_UI:$IMAGE_TAG
+      - echo Writing image definitions for ECS rolling deploy...
+      - printf '[{"name":"api","imageUri":"%s"}]' $ECR_API:$IMAGE_TAG > imagedefinitions-api.json
+      - printf '[{"name":"ui","imageUri":"%s"}]' $ECR_UI:$IMAGE_TAG > imagedefinitions-ui.json
+      - cat imagedefinitions-api.json
+      - cat imagedefinitions-ui.json
+
+artifacts:
+  files:
+    - imagedefinitions-api.json
+    - imagedefinitions-ui.json
