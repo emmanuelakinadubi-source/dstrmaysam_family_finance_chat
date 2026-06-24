@@ -1,13 +1,21 @@
+import os
 import requests
 import streamlit as st
+import pandas as pd
 
 API_BASE = "http://api:8000"
 
 st.set_page_config(
     page_title="Event Manager",
+    page_icon="🗓️",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
+
+# Custom logo at the top of the sidebar
+_ICON_PATH = os.path.join(os.path.dirname(__file__), "assets", "app_icon.png")
+if os.path.exists(_ICON_PATH):
+    st.logo(_ICON_PATH)
 
 
 # ─── API Helpers ──────────────────────────────────────────────────────────────
@@ -36,12 +44,63 @@ def _call_upload_api(file, text):
         return None
 
 
+def _build_event_context() -> str:
+    """
+    Build a structured [EVENT CONTEXT] block from the uploaded draft stored in session state.
+    Injected into every chat message so the agent never has to ask for details.
+    """
+    data = st.session_state.get("venue_results")
+    if not data:
+        return ""
+    reqs = data.get("event_requirements") or {}
+    collection = data.get("event_collection", "event_management")
+    lines = [
+        "[EVENT CONTEXT — user has already uploaded an event brief. Use this information directly.]",
+        f"Collection: {collection}",
+    ]
+    if reqs.get("city"):
+        lines.append(f"City: {reqs['city']}")
+    if reqs.get("postcode"):
+        lines.append(f"Postcode: {reqs['postcode']}")
+    if reqs.get("attendees"):
+        lines.append(f"Attendees: {reqs['attendees']}")
+    if reqs.get("min_budget") or reqs.get("max_budget"):
+        lines.append(f"Budget: £{reqs.get('min_budget', 0):,.0f} – £{reqs.get('max_budget', 0):,.0f}")
+    if reqs.get("event_date"):
+        lines.append(f"Event date: {reqs['event_date']}")
+    if reqs.get("food_required"):
+        lines.append("Food/catering: Required")
+    if reqs.get("food_categories"):
+        lines.append(f"Dietary categories: {', '.join(reqs['food_categories'])}")
+    if reqs.get("hotel_required"):
+        lines.append("Hotel accommodation: Required")
+    if reqs.get("additional_requirements"):
+        extras = reqs["additional_requirements"]
+        if isinstance(extras, list):
+            lines.append(f"Additional requirements: {', '.join(extras)}")
+    # Vendor intel
+    vendor_data = st.session_state.get("vendor_results")
+    if vendor_data and vendor_data.get("filtered_count", 0) > 0:
+        lines.append(
+            f"Vendor search results available in ChromaDB vendor_intel collection: "
+            f"{vendor_data['caterers_found']} caterers, {vendor_data['hotels_found']} hotels "
+            f"near {vendor_data.get('postcode', reqs.get('postcode', ''))}."
+        )
+    lines.append(
+        "INSTRUCTION: Do NOT ask the user for event details. "
+        "Call search_event_requirements and search_nearby_vendors to answer based on this indexed data."
+    )
+    return "\n".join(lines)
+
+
 def _call_chat_api(message: str, knowledge_source: str, history: list) -> dict:
     try:
+        event_context = _build_event_context()
         payload = {
             "message": message,
             "knowledge_source": knowledge_source,
             "history": history,
+            "event_context": event_context or None,
         }
         resp = requests.post(f"{API_BASE}/api/chat", json=payload, timeout=120)
         if resp.status_code == 200:
@@ -286,56 +345,185 @@ with tab_events:
         "Your event will also be indexed so you can ask questions in the **Chat** tab."
     )
 
-    st.header("Submit Event Requirements")
+    # ── Draft management helpers ──────────────────────────────────────────────
+    def _fetch_drafts() -> list:
+        try:
+            resp = requests.get(f"{API_BASE}/api/event/drafts", timeout=10)
+            return resp.json() if resp.status_code == 200 else []
+        except Exception:
+            return []
 
-    input_method = st.radio(
-        "Input method:",
-        ["📁 Upload File (PDF / Word)", "✏️ Enter Text"],
-        horizontal=True,
-        key="event_input_method",
-    )
+    def _load_draft(draft_id: str):
+        try:
+            resp = requests.get(f"{API_BASE}/api/event/drafts/{draft_id}", timeout=15)
+            return resp.json() if resp.status_code == 200 else None
+        except Exception:
+            return None
 
-    uploaded_file = None
-    event_text = None
+    def _delete_draft(draft_id: str) -> bool:
+        try:
+            resp = requests.delete(f"{API_BASE}/api/event/drafts/{draft_id}", timeout=10)
+            return resp.status_code == 204
+        except Exception:
+            return False
 
-    if input_method == "📁 Upload File (PDF / Word)":
-        uploaded_file = st.file_uploader(
-            "Upload your event brief",
-            type=["pdf", "doc", "docx"],
-            key="event_uploader",
-        )
-        if uploaded_file:
-            st.success(f"Uploaded: **{uploaded_file.name}**")
-    else:
-        event_text = st.text_area(
-            "Event requirements",
-            height=220,
-            placeholder=(
-                "Example:\n"
-                "Corporate conference in London for 250 guests.\n"
-                "Date: 20th September 2026, 9am – 6pm.\n"
-                "Budget: £8,000 – £18,000.\n"
-                "Requirements: AV equipment, breakout rooms, catering, parking."
-            ),
-            key="event_text_area",
-        )
+    if "active_draft_id" not in st.session_state:
+        st.session_state["active_draft_id"] = None
 
-    if st.button("🔍 Find Venues", type="primary", use_container_width=True, key="find_venues_btn"):
-        if not uploaded_file and not event_text:
-            st.error("Please provide event requirements via file upload or text input.")
-        else:
-            with st.spinner("AI agent is analysing requirements and finding venues — 30–60 s…"):
-                result = _call_upload_api(uploaded_file, event_text)
-            if result:
-                st.session_state.venue_results = result
-                # Reset event chat history so it reflects the new event
-                st.session_state.chat_histories["event_management"] = []
-                st.success("Venues found! See recommendations below.")
-                if result.get("event_collection"):
-                    st.info(
-                        f"Your event requirements are indexed in **{result['event_collection']}**. "
-                        "Switch to the **Chat** tab and select **Event Requirements** to ask follow-up questions."
+    # ── Saved Drafts Section ──────────────────────────────────────────────────
+    saved_drafts = _fetch_drafts()
+    active_id = st.session_state.get("active_draft_id")
+
+    if saved_drafts:
+        # Active draft banner
+        if active_id:
+            active_meta = next((d for d in saved_drafts if d["draft_id"] == active_id), None)
+            if active_meta:
+                banner_col, clear_col = st.columns([6, 1])
+                with banner_col:
+                    parts = []
+                    if active_meta.get("city"):       parts.append(f"📍 {active_meta['city']}")
+                    if active_meta.get("postcode"):   parts.append(active_meta["postcode"])
+                    if active_meta.get("event_date"): parts.append(f"📅 {active_meta['event_date']}")
+                    if active_meta.get("attendees"):  parts.append(f"👥 {active_meta['attendees']} attendees")
+                    if active_meta.get("max_budget"): parts.append(f"£{float(active_meta['max_budget'] or 0):,.0f} budget")
+                    st.success(
+                        f"**Active draft:** {active_meta['filename']}  \n"
+                        + "  ·  ".join(parts)
                     )
+                with clear_col:
+                    st.write("")
+                    if st.button("✖ Deselect", key="deselect_draft_btn"):
+                        st.session_state["active_draft_id"] = None
+                        st.session_state.venue_results = None
+                        st.session_state["vendor_results"] = None
+                        st.rerun()
+
+        with st.expander(
+            f"📂 Saved Drafts ({len(saved_drafts)})" +
+            (" — click to switch draft" if active_id else " — select a draft to load"),
+            expanded=not bool(active_id),
+        ):
+            for d in saved_drafts:
+                is_active = d["draft_id"] == active_id
+                row_c, use_c, del_c = st.columns([6, 1, 1])
+                with row_c:
+                    label = ("✅ " if is_active else "") + d["filename"]
+                    st.markdown(f"**{label}**")
+                    meta = []
+                    if d.get("city"):       meta.append(f"📍 {d['city']}")
+                    if d.get("postcode"):   meta.append(d["postcode"])
+                    if d.get("event_date"): meta.append(f"📅 {d['event_date']}")
+                    if d.get("attendees"):  meta.append(f"👥 {d['attendees']}")
+                    if d.get("max_budget"): meta.append(f"£{float(d['max_budget'] or 0):,.0f}")
+                    if d.get("created_at"): meta.append(f"🕐 {d['created_at'][:10]}")
+                    st.caption("  ·  ".join(meta))
+                with use_c:
+                    if st.button(
+                        "Active" if is_active else "Use",
+                        key=f"use_draft_{d['draft_id']}",
+                        disabled=is_active,
+                        type="primary",
+                    ):
+                        with st.spinner("Loading draft…"):
+                            full = _load_draft(d["draft_id"])
+                        if full:
+                            st.session_state.venue_results = full
+                            st.session_state["active_draft_id"] = d["draft_id"]
+                            st.session_state.chat_histories["event_management"] = []
+                            st.rerun()
+                        else:
+                            st.error("Could not load draft.")
+                with del_c:
+                    if st.button("Delete", key=f"del_draft_{d['draft_id']}"):
+                        if _delete_draft(d["draft_id"]):
+                            if d["draft_id"] == active_id:
+                                st.session_state["active_draft_id"] = None
+                                st.session_state.venue_results = None
+                                st.session_state["vendor_results"] = None
+                            st.rerun()
+                        else:
+                            st.error("Delete failed.")
+
+        st.divider()
+
+    # ── Upload / Submit a New Draft ───────────────────────────────────────────
+    has_active = bool(st.session_state.get("venue_results"))
+    with st.expander("📤 Upload New Event Brief", expanded=not has_active):
+        st.subheader("Submit Event Requirements")
+
+        # Postcode + radius — drives the local vendor/hotel scrape
+        pc_col, rad_col = st.columns([2, 3])
+        event_postcode = pc_col.text_input(
+            "Event postcode *",
+            placeholder="e.g. M1 1AE",
+            help="UK postcode of the venue / event location. Used to find nearby caterers and hotels.",
+        )
+        search_radius = rad_col.slider(
+            "Vendor search radius (km)", min_value=1, max_value=100, value=5,
+            help=(
+                "How far from the postcode to search. "
+                "Vendors beyond 10 km are flagged as delivery-only. "
+                "Max 100 km."
+            ),
+        )
+
+        input_method = st.radio(
+            "Input method:",
+            ["📁 Upload File (PDF / Word)", "✏️ Enter Text"],
+            horizontal=True,
+            key="event_input_method",
+        )
+
+        uploaded_file = None
+        event_text = None
+
+        if input_method == "📁 Upload File (PDF / Word)":
+            uploaded_file = st.file_uploader(
+                "Upload your event brief",
+                type=["pdf", "doc", "docx"],
+                key="event_uploader",
+            )
+            if uploaded_file:
+                st.success(f"Uploaded: **{uploaded_file.name}**")
+        else:
+            event_text = st.text_area(
+                "Event requirements",
+                height=220,
+                placeholder=(
+                    "Example:\n"
+                    "Corporate conference in London for 250 guests.\n"
+                    "Date: 20th September 2026, 9am – 6pm.\n"
+                    "Budget: £8,000 – £18,000.\n"
+                    "Requirements: AV equipment, breakout rooms, catering, parking."
+                ),
+                key="event_text_area",
+            )
+
+        if st.button("🔍 Find Venues", type="primary", use_container_width=True, key="find_venues_btn"):
+            if not uploaded_file and not event_text:
+                st.error("Please provide event requirements via file upload or text input.")
+            else:
+                with st.spinner("AI agent is analysing requirements and finding venues — 30–60 s…"):
+                    result = _call_upload_api(uploaded_file, event_text)
+                if result:
+                    st.session_state.venue_results = result
+                    st.session_state["active_draft_id"] = result.get("event_id")
+                    st.session_state.chat_histories["event_management"] = []
+                    st.success("Venues found! Draft saved — it will be available next time you open the app.")
+                    if result.get("event_collection"):
+                        st.info(
+                            f"Your event requirements are indexed in **{result['event_collection']}**. "
+                            "Switch to the **Chat** tab and select **Event Requirements** to ask follow-up questions."
+                        )
+                    st.rerun()
+
+    # Postcode/radius are defined inside the expander widget code, so they're always
+    # available (Streamlit runs collapsed expander code too). But if the expander was
+    # collapsed and the user never typed anything, fall back to the active draft's postcode.
+    _active_reqs = (st.session_state.get("venue_results") or {}).get("event_requirements") or {}
+    if not event_postcode:
+        event_postcode = _active_reqs.get("postcode", "")
 
     # ── Venue Recommendation Dashboard ───────────────────────────────────────
     if st.session_state.venue_results:
@@ -374,15 +562,264 @@ with tab_events:
             for rec in summary.get("key_recommendations", []):
                 st.write(f"• {rec}")
 
-        fallback_count = sum(1 for v in venues if v.get("is_fallback"))
-        if fallback_count > 0:
-            st.warning(f"No exact matches — showing {len(venues)} closest alternatives with relaxed constraints.")
-
         if not venues:
-            st.warning("No venues matched. Try adjusting budget or location.")
+            st.info(
+                "**No pre-indexed venues found for this city.**  \n"
+                "The venue knowledge base doesn't have listings for every UK city yet. "
+                "Use the **Find Local Caterers & Hotels** section below to run a live web search "
+                "that scrapes real venues and hotels near your event postcode in real time."
+            )
         else:
-            st.subheader(f"Recommended Venues ({len(venues)})")
-            _render_venue_grid(venues)
+            fallback_count = sum(1 for v in venues if v.get("is_fallback"))
+            wrong_city = [
+                v for v in venues
+                if v.get("city", "").lower() not in (reqs.get("city", "").lower() or "zzzz")
+                and reqs.get("city", "")
+            ]
+            if wrong_city:
+                # Shouldn't happen after the guardrail fix — but surface it loudly if it does
+                st.error(
+                    f"Location guardrail warning: {len(wrong_city)} venue(s) from wrong city "
+                    "detected and hidden. Please report this."
+                )
+                venues = [v for v in venues if v not in wrong_city]
+
+            if fallback_count > 0 and venues:
+                st.warning(
+                    f"Showing {len(venues)} venues with relaxed constraints "
+                    f"(no exact matches in {reqs.get('city', 'your city')})."
+                )
+
+            if venues:
+                st.subheader(f"Recommended Venues ({len(venues)})")
+                _render_venue_grid(venues)
+
+        # ── Local Vendor & Hotel Finder (live web scraper — primary for hotels) ─
+        st.divider()
+        st.subheader("Find Local Caterers & Hotels")
+
+        if not event_postcode:
+            st.info("Enter an **event postcode** above to enable proximity-based vendor search.")
+        else:
+            reqs_v = data.get("event_requirements", {})
+            food_required  = bool(reqs_v.get("food_required", True))
+            hotel_required = bool(reqs_v.get("hotel_required", True))
+            max_budget     = float(reqs_v.get("max_budget", 0) or 0)
+            attendees      = int(reqs_v.get("attendees", 0) or 0)
+            food_cats      = reqs_v.get("food_categories", []) or []
+
+            # Controls row
+            fc1, fc2, fc3 = st.columns(3)
+            food_required  = fc1.checkbox("Caterers / food vendors", value=food_required)
+            hotel_required = fc2.checkbox("Hotels / accommodation",  value=hotel_required)
+            active_radius  = fc3.slider(
+                "Radius (km)", min_value=1, max_value=100,
+                value=int(search_radius),
+                key="vendor_radius_active",
+                help="Vendors beyond 10 km will be marked as delivery-only.",
+            )
+
+            st.caption(
+                f"**How it works:** DuckDuckGo searches the web for '{event_postcode}' vendors → "
+                "discovers their websites automatically → scrapes each page → "
+                "OSM map data fills in geo-location → pipeline filters by radius, budget & diet → "
+                "results are indexed in ChromaDB for the chat agent."
+            )
+
+            if st.button("🌐 Search Web + Map for Nearby Vendors", type="primary",
+                         use_container_width=True, key="find_vendors_btn"):
+                with st.spinner(
+                    f"Searching web + OSM within {active_radius} km of {event_postcode} "
+                    f"— this may take 30–90 s…"
+                ):
+                    try:
+                        payload = {
+                            "postcode":        event_postcode.strip(),
+                            "city":            reqs_v.get("city", ""),
+                            "attendees":       attendees,
+                            "total_budget":    max_budget,
+                            "radius_km":       float(active_radius),
+                            "food_required":   food_required,
+                            "hotel_required":  hotel_required,
+                            "food_categories": food_cats,
+                            "event_id":        data.get("event_id"),
+                        }
+                        # Persist so the retry button can reuse it on the next render
+                        st.session_state["vendor_last_payload"] = payload
+                        resp = requests.post(
+                            f"{API_BASE}/api/v1/vendors/scrape-for-event",
+                            json=payload,
+                            timeout=180,
+                        )
+                        if resp.status_code == 200:
+                            vdata = resp.json()
+                            st.session_state["vendor_results"] = vdata
+                            st.session_state["vendor_search_radius"] = active_radius
+                        else:
+                            err = resp.json().get("detail", resp.text)
+                            st.error(f"Vendor search failed: {err}")
+                    except Exception as exc:
+                        st.error(f"Connection error: {exc}")
+
+            vdata = st.session_state.get("vendor_results")
+
+            if vdata:
+                used_radius = st.session_state.get("vendor_search_radius", active_radius)
+                total_found = vdata.get("filtered_count", 0)
+
+                # ── No results → suggest nearby towns or widen radius ─────────
+                if total_found == 0:
+                    st.warning(
+                        f"No verified vendors found within **{used_radius} km** of "
+                        f"**{event_postcode}**.\n\n"
+                        "Results from other cities (Manchester, London, etc.) have been "
+                        "filtered out by the location guardrail — only vendors confirmed "
+                        "in your event area are shown."
+                    )
+
+                    nearby_towns = vdata.get("nearby_towns", [])
+                    if nearby_towns:
+                        st.subheader("📍 Nearby towns with potential vendors")
+                        st.caption(
+                            "These towns are close to your event postcode. "
+                            "Select one or more to search for vendors there."
+                        )
+                        town_options = {
+                            f"{t['town']} ({t['outcode']}) — {t['distance_km']} km away": t
+                            for t in nearby_towns
+                        }
+                        selected_labels = st.multiselect(
+                            "Select nearby towns to include in vendor search:",
+                            options=list(town_options.keys()),
+                            key="nearby_towns_select",
+                        )
+                        if selected_labels and st.button(
+                            "🔍 Search selected towns for vendors",
+                            key="search_nearby_towns_btn",
+                            type="primary",
+                        ):
+                            # Run one search per selected town and aggregate
+                            all_results = []
+                            for label in selected_labels:
+                                town_info = town_options[label]
+                                town_postcode = town_info["postcode_example"]
+                                with st.spinner(f"Searching {town_info['town']}…"):
+                                    try:
+                                        tp = dict(st.session_state.get("vendor_last_payload", {}))
+                                        tp["postcode"] = town_postcode
+                                        tp["city"] = town_info["town"]
+                                        tp["radius_km"] = float(used_radius)
+                                        r = requests.post(
+                                            f"{API_BASE}/api/v1/vendors/scrape-for-event",
+                                            json=tp, timeout=180,
+                                        )
+                                        if r.status_code == 200:
+                                            all_results.append(r.json())
+                                    except Exception as exc:
+                                        st.error(f"Error searching {town_info['town']}: {exc}")
+
+                            if all_results:
+                                # Merge results — use the last one as base (indexing is cumulative)
+                                merged = all_results[-1]
+                                total_c = sum(r.get("caterers_found", 0) for r in all_results)
+                                total_h = sum(r.get("hotels_found", 0)   for r in all_results)
+                                merged["caterers_found"] = total_c
+                                merged["hotels_found"]   = total_h
+                                merged["filtered_count"] = total_c + total_h
+                                merged["top_caterers"] = [
+                                    v for r in all_results for v in r.get("top_caterers", [])
+                                ][:15]
+                                merged["top_hotels"] = [
+                                    v for r in all_results for v in r.get("top_hotels", [])
+                                ][:15]
+                                st.session_state["vendor_results"] = merged
+                                st.rerun()
+
+                    # Radius expansion as a secondary option
+                    if used_radius < 100:
+                        st.divider()
+                        st.caption("Or widen the radius to find more options:")
+                        expand_min = min(used_radius + 1, 99)
+                        expand_default = min(used_radius * 2, 100)
+                        new_radius = st.slider(
+                            "Search radius (km):",
+                            min_value=expand_min,
+                            max_value=100,
+                            value=max(expand_default, expand_min),
+                            key="expand_radius_slider",
+                        )
+                        if st.button("🔁 Retry with wider radius", key="retry_wider_btn"):
+                            with st.spinner(f"Retrying with {new_radius} km radius…"):
+                                try:
+                                    retry_payload = dict(st.session_state.get("vendor_last_payload", {}))
+                                    retry_payload["radius_km"] = float(new_radius)
+                                    resp = requests.post(
+                                        f"{API_BASE}/api/v1/vendors/scrape-for-event",
+                                        json=retry_payload, timeout=180,
+                                    )
+                                    if resp.status_code == 200:
+                                        st.session_state["vendor_results"] = resp.json()
+                                        st.session_state["vendor_search_radius"] = new_radius
+                                        st.session_state["vendor_last_payload"] = retry_payload
+                                        st.rerun()
+                                    else:
+                                        st.error(resp.json().get("detail", resp.text))
+                                except Exception as exc:
+                                    st.error(f"Retry failed: {exc}")
+                    else:
+                        st.error(
+                            "Already at 100 km radius with no results. "
+                            "Try selecting a nearby town above."
+                        )
+                else:
+                    # ── Metrics row ───────────────────────────────────────────
+                    m1, m2, m3, m4, m5 = st.columns(5)
+                    m1.metric("Total vendors", total_found)
+                    m2.metric("Caterers", vdata.get("caterers_found", 0))
+                    m3.metric("Hotels",   vdata.get("hotels_found", 0))
+                    m4.metric("Indexed",  vdata.get("indexed", 0))
+                    delivery_count = sum(
+                        1 for v in vdata.get("top_caterers", []) + vdata.get("top_hotels", [])
+                        if v.get("delivery_available")
+                    )
+                    m5.metric("Delivery-capable", delivery_count)
+
+                    st.caption(
+                        f"Radius **{used_radius} km** · "
+                        f"{vdata.get('raw_count', 0)} raw → "
+                        f"{total_found} after guardrails · "
+                        "Vendors >10 km are flagged as delivery-only."
+                    )
+
+                    def _render_vendor_df(records: list, label: str, icon: str):
+                        if not records:
+                            return
+                        df = pd.DataFrame(records)
+                        df.columns = [c.replace("_", " ").title() for c in df.columns]
+                        # Put delivery flag prominently
+                        if "Delivery Available" in df.columns:
+                            df["Delivery Available"] = df["Delivery Available"].map(
+                                {True: "Yes 🚚", False: "In-person"}
+                            )
+                        with st.expander(f"{icon} {label}", expanded=True):
+                            st.dataframe(df, use_container_width=True)
+
+                    _render_vendor_df(
+                        vdata.get("top_caterers", []),
+                        f"Caterers ({vdata.get('caterers_found', 0)} found)",
+                        "🍽️"
+                    )
+                    _render_vendor_df(
+                        vdata.get("top_hotels", []),
+                        f"Hotels ({vdata.get('hotels_found', 0)} found)",
+                        "🏨"
+                    )
+
+                    st.success(
+                        "✅ Results indexed. Chat with your AI assistant: "
+                        "*'Which caterers near my event offer halal delivery?'* or "
+                        "*'What hotels are within 5 km?'*"
+                    )
 
 
 # ════════════════════════════════════════════════════════════════
@@ -429,6 +866,29 @@ with tab_chat:
                 "Go to **Event Manager** and submit your event brief first, "
                 "then return here to ask questions about your specific event."
             )
+
+    # ── Draft context banner (shown for ALL knowledge sources) ───────────────
+    event_data = st.session_state.get("venue_results")
+    if event_data:
+        reqs_banner = event_data.get("event_requirements") or {}
+        city_b   = reqs_banner.get("city", "")
+        pc_b     = reqs_banner.get("postcode", "")
+        att_b    = reqs_banner.get("attendees", "")
+        bud_b    = reqs_banner.get("max_budget", "")
+        coll_b   = event_data.get("event_collection", "event_management")
+        vendor_b = st.session_state.get("vendor_results")
+        vendor_note = ""
+        if vendor_b and vendor_b.get("filtered_count", 0) > 0:
+            vendor_note = (
+                f" · **{vendor_b['caterers_found']}** caterers & "
+                f"**{vendor_b['hotels_found']}** hotels indexed"
+            )
+        st.success(
+            f"📄 **Draft linked** — {city_b or 'Event'} ({pc_b}) · "
+            f"{att_b} attendees · £{float(bud_b or 0):,.0f} budget · "
+            f"Collection: `{coll_b}`{vendor_note}  \n"
+            "The AI already has your event details — just ask your question directly."
+        )
 
     st.divider()
 

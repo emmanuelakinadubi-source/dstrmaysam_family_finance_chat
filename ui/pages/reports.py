@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from ui.services import api_client as api
 
-st.set_page_config(page_title="Reports & Analytics", layout="wide")
+st.set_page_config(page_title="Reports & Analytics", page_icon="📈", layout="wide")
 st.title("📊 Reports & Analytics")
 
 tab1, tab2, tab3 = st.tabs(["🏠 Family Analytics", "🛒 Vendor Analytics", "📈 Trends"])
