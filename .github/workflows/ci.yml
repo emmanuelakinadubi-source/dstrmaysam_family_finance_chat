@@ -1,13 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: ['**']        # runs on every branch push
-    paths-ignore:
-      - '**.md'             # skip doc-only changes
-      - '.env.example'
   pull_request:
-    branches: [main]        # also runs when a PR targets main
+    branches: [main]
 
 jobs:
   lint:
