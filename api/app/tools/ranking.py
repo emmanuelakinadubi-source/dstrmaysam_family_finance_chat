@@ -60,6 +60,22 @@ def _location_component(metadata: Dict, requirements: EventRequirements) -> floa
     return 0.0
 
 
+def city_matches(metadata: Dict, requirements: EventRequirements) -> bool:
+    """Hard location guard — False means this venue is in the wrong city/region entirely."""
+    if not requirements.city:
+        return True   # no location constraint → all cities pass
+    venue_city = (metadata.get("city") or "").lower()
+    req_city = requirements.city.lower()
+    if not venue_city:
+        return False  # no city on venue → reject when event has a city
+    if req_city in venue_city or venue_city in req_city:
+        return True
+    # Allow county / region synonyms (e.g. "Essex" matches "Chelmsford")
+    if any(word in venue_city for word in req_city.split() if len(word) > 2):
+        return True
+    return False
+
+
 def _event_type_component(metadata: Dict, requirements: EventRequirements) -> float:
     """10% weight — returns 0.0–1.0"""
     venue_types = (metadata.get("event_types") or "").lower()
@@ -175,7 +191,13 @@ def rank_venues(
             best_per_venue[vid] = chunk
 
     unique = list(best_per_venue.values())
-    for v in unique:
+
+    # Hard location guard — drop venues that are not in the requested city.
+    # We do this before scoring so wrong-city venues never appear regardless of
+    # how good their capacity/budget scores are.
+    city_filtered = [v for v in unique if city_matches(v.get("metadata", {}), requirements)]
+
+    for v in city_filtered:
         v["match_score"] = score_venue(v, requirements, relaxed=relaxed)
 
-    return sorted(unique, key=lambda v: v["match_score"], reverse=True)
+    return sorted(city_filtered, key=lambda v: v["match_score"], reverse=True)

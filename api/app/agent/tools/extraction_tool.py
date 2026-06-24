@@ -8,6 +8,7 @@ from langchain_openai import AzureChatOpenAI
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.observability import make_langfuse_handler
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +55,10 @@ def _extract_fn(raw_text: str) -> str:
         SystemMessage(content=_EXTRACTION_SYSTEM_PROMPT),
         HumanMessage(content=f"Extract requirements from:\n\n{raw_text[:4000]}"),
     ]
+    lf = make_langfuse_handler(trace_name="extract_event_requirements")
+    cb_config = {"callbacks": [lf]} if lf else {}
     try:
-        response = llm.invoke(messages)
+        response = llm.invoke(messages, config=cb_config)
         text = response.content.strip()
         if text.startswith("```"):
             lines = text.splitlines()

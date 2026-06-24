@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.vendor import VendorPrice
@@ -109,3 +109,117 @@ def crawl_schedule():
         "daily_venue_indexing": get_next_run_time("daily_venue_indexing"),
         "weekly_vendor_crawl": get_next_run_time("weekly_vendor_crawl"),
     }
+
+
+# ── Smart event-aware scrape endpoint ─────────────────────────────────────────
+
+from pydantic import BaseModel as _BaseModel
+
+class _EventScrapeRequest(_BaseModel):
+    postcode: str
+    city: str = ""
+    attendees: int = 0
+    total_budget: float = 0.0
+    catering_budget: float = 0.0
+    hotel_budget: float = 0.0
+    radius_km: float = 5.0
+    food_required: bool = True
+    hotel_required: bool = True
+    food_categories: List[str] = []
+    event_id: Optional[str] = None
+
+
+@router.post("/scrape-for-event")
+def scrape_for_event(data: _EventScrapeRequest, background_tasks: BackgroundTasks):
+    """
+    Event-aware vendor scrape + RAG index pipeline.
+
+    1. Resolves postcode → coordinates (postcodes.io)
+    2. Scrapes nearby caterers + hotels via OSM Overpass (+ optional feedr.co)
+    3. Applies guardrails: radius, budget, dietary requirements
+    4. Embeds results → ChromaDB vendor_intel collection
+    5. Returns summary — chat agent can now answer vendor questions for this event
+    """
+    from app.modules.vendors.smart_scraper import EventScraperConfig, run_event_scrape
+    from app.modules.vendors.vendor_pipeline import run_pipeline
+    from app.modules.vendors.vendor_indexer import index_vendors
+
+    config = EventScraperConfig(
+        postcode=data.postcode.strip(),
+        city=data.city,
+        attendees=data.attendees,
+        total_budget=data.total_budget,
+        catering_budget=data.catering_budget,
+        hotel_budget=data.hotel_budget,
+        radius_km=data.radius_km,
+        food_required=data.food_required,
+        hotel_required=data.hotel_required,
+        food_categories=data.food_categories,
+        event_id=data.event_id,
+    )
+
+    try:
+        raw = run_event_scrape(config)
+        cleaned = run_pipeline(raw, config)
+        index_result = index_vendors(cleaned, event_id=data.event_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Scrape failed: {exc}")
+
+    caterers = [v for v in cleaned if v.vendor_type == "catering"]
+    hotels   = [v for v in cleaned if v.vendor_type == "hotel"]
+
+    # If nothing found, suggest nearby towns
+    nearby_towns = []
+    if len(cleaned) == 0:
+        from app.modules.vendors.smart_scraper import get_nearby_towns
+        nearby_towns = get_nearby_towns(data.postcode)
+
+    return {
+        "status": "ok",
+        "postcode": data.postcode,
+        "radius_km": data.radius_km,
+        "raw_count": len(raw),
+        "filtered_count": len(cleaned),
+        "caterers_found": len(caterers),
+        "hotels_found": len(hotels),
+        "indexed": index_result.get("indexed", 0),
+        "collection": index_result.get("collection"),
+        "nearby_towns": nearby_towns,
+        "top_caterers": [
+            {
+                "name": v.name,
+                "distance_km": v.distance_km,
+                "delivery_available": v.delivery_available,
+                "price_per_head": v.price_per_head,
+                "specializations": v.specializations,
+                "cuisine": v.cuisine,
+                "address": v.address,
+                "phone": v.phone,
+                "website": v.website,
+                "source": v.source,
+            }
+            for v in caterers[:15]
+        ],
+        "top_hotels": [
+            {
+                "name": v.name,
+                "distance_km": v.distance_km,
+                "delivery_available": v.delivery_available,
+                "price_per_head": v.price_per_head,
+                "address": v.address,
+                "phone": v.phone,
+                "website": v.website,
+                "source": v.source,
+            }
+            for v in hotels[:15]
+        ],
+    }
+
+
+@router.get("/intel/count")
+def vendor_intel_count():
+    """Number of scraped vendor documents currently in ChromaDB."""
+    from app.modules.vendors.vendor_indexer import vendor_intel_count
+    return {"vendor_intel_documents": vendor_intel_count()}

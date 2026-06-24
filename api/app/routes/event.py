@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from typing import Optional
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.agent.event_agent import process_event_requirements
 from app.core.database import get_db
+from app.models.event_draft import EventDraft
 from app.modules.events import repository as repo
 from app.schemas.event import (
     EventRequirements,
@@ -164,7 +166,7 @@ async def upload_event(
     if not venue_cards:
         summary = _empty_summary()
 
-    return EventUploadResponse(
+    response = EventUploadResponse(
         event_id=event_id,
         event_requirements=requirements,
         recommended_venues=venue_cards,
@@ -172,6 +174,90 @@ async def upload_event(
         agent_response=agent_result.get("agent_response", ""),
         event_collection=event_collection,
     )
+
+    # Persist draft to DB so the user can reload without re-uploading
+    try:
+        draft = EventDraft(
+            filename=file.filename if file else "Manual text input",
+            event_name=f"Event – {req_data.get('city', '')} {req_data.get('event_date', '')}".strip(" –"),
+            city=req_data.get("city", ""),
+            postcode=req_data.get("postcode", ""),
+            event_date=req_data.get("event_date", ""),
+            attendees=int(req_data.get("attendees", 0) or 0),
+            max_budget=str(req_data.get("max_budget") or req_data.get("min_budget") or ""),
+            event_collection=event_collection,
+            event_id=event_id,
+            requirements_json=requirements.model_dump_json(),
+            venues_json=json.dumps([v.model_dump() for v in venue_cards]),
+            summary_json=summary.model_dump_json(),
+            agent_response=agent_result.get("agent_response", ""),
+        )
+        db.add(draft)
+        db.commit()
+        db.refresh(draft)
+        response.event_id = response.event_id or str(draft.id)
+        logger.info("Event draft persisted: %s", draft.id)
+    except Exception as exc:
+        logger.warning("Draft persistence failed (non-fatal): %s", exc)
+
+    return response
+
+
+@router.get("/event/drafts")
+async def list_event_drafts(db: Session = Depends(get_db)):
+    """Return all saved event drafts, newest first."""
+    drafts = db.query(EventDraft).order_by(EventDraft.created_at.desc()).all()
+    return [
+        {
+            "draft_id":        str(d.id),
+            "filename":        d.filename,
+            "event_name":      d.event_name,
+            "city":            d.city,
+            "postcode":        d.postcode,
+            "event_date":      d.event_date,
+            "attendees":       d.attendees,
+            "max_budget":      d.max_budget,
+            "event_collection": d.event_collection,
+            "event_id":        d.event_id,
+            "created_at":      d.created_at.isoformat() if d.created_at else None,
+        }
+        for d in drafts
+    ]
+
+
+@router.get("/event/drafts/{draft_id}")
+async def get_event_draft(draft_id: str, db: Session = Depends(get_db)):
+    """Load a saved draft — returns the full EventUploadResponse payload."""
+    draft = db.query(EventDraft).filter(EventDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found.")
+    try:
+        requirements = json.loads(draft.requirements_json) if draft.requirements_json else {}
+        venues       = json.loads(draft.venues_json)       if draft.venues_json       else []
+        summary      = json.loads(draft.summary_json)      if draft.summary_json      else {}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Draft data corrupt: {exc}")
+    return {
+        "draft_id":         str(draft.id),
+        "filename":         draft.filename,
+        "event_id":         draft.event_id,
+        "event_collection": draft.event_collection,
+        "event_requirements": requirements,
+        "recommended_venues": venues,
+        "summary":          summary,
+        "agent_response":   draft.agent_response,
+    }
+
+
+@router.delete("/event/drafts/{draft_id}", status_code=204)
+async def delete_event_draft(draft_id: str, db: Session = Depends(get_db)):
+    """Permanently remove a saved draft."""
+    draft = db.query(EventDraft).filter(EventDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found.")
+    db.delete(draft)
+    db.commit()
+    return None
 
 
 @router.get("/event/recommendations")

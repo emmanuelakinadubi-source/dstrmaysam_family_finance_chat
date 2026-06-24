@@ -6,6 +6,11 @@ class EventRequirements(BaseModel):
     event_date: Optional[str] = ""
     event_time: Optional[str] = ""
     city: Optional[str] = ""
+    postcode: Optional[str] = None          # UK postcode — drives proximity vendor search
+    radius_km: float = 5.0                  # search radius for nearby vendors / hotels
+    food_required: bool = False
+    food_categories: List[str] = []         # e.g. ["vegetarian", "halal", "vegan"]
+    hotel_required: bool = False
     min_budget: float = 0.0
     max_budget: float = 0.0
     attendees: int = 0
@@ -84,6 +89,7 @@ class ChatRequest(BaseModel):
     message: str
     knowledge_source: str = "venue_master"
     history: List[ChatMessage] = []
+    event_context: Optional[str] = None   # Injected draft summary for the agent
 
 
 class ChatResponse(BaseModel):

@@ -28,7 +28,14 @@ def _find_nearby_fn(
     target_budget: float = 0.0,
     additional_requirements: str = "",
 ) -> str:
-    """Fallback venue search with progressively relaxed constraints."""
+    """
+    Fallback venue search with relaxed budget/capacity constraints.
+
+    IMPORTANT: city constraint is NEVER dropped.  We do not suggest venues in
+    Manchester or London for a Chelmsford event.  If no venues are found for the
+    requested city in the indexed database, we return 0 and tell the user to use
+    the live web-scraper tab to discover real local hotels and venues.
+    """
     reqs = EventRequirements(
         city=city,
         attendees=int(attendees * 0.8) if attendees > 0 else 0,
@@ -46,16 +53,8 @@ def _find_nearby_fn(
         query_parts.append(additional_requirements)
     query = " ".join(query_parts)
 
-    # Priority 1: Try with city filter
-    chunks = retrieve_venues(query=query, city=city.strip() if city else None, top_k=15)
-
-    # Priority 2: If fewer than 3 results, broaden to nationwide
-    if len(chunks) < 3:
-        logger.info("Fewer than 3 venues in '%s', broadening to nationwide search", city)
-        broader = retrieve_venues(query=query, city=None, top_k=15)
-        seen = {c["metadata"]["venue_id"] for c in chunks}
-        chunks.extend(c for c in broader if c["metadata"]["venue_id"] not in seen)
-
+    # Always keep the city filter — never broaden to nationwide
+    chunks = retrieve_venues(query=query, city=city.strip() if city else None, top_k=20)
     ranked = rank_venues(chunks, reqs, relaxed=True)
     reasons = _batch_reasons(reqs, ranked[:5])
 
@@ -65,20 +64,32 @@ def _find_nearby_fn(
         reason = (reasons[i] if i < len(reasons) else _fallback_reason(meta))
         venues.append(_build_venue_card(v, meta, reqs, reason, is_fallback=True))
 
-    # Build fallback explanation
-    alt_notes = []
-    if city and venues and venues[0].get("city", "").lower() != city.lower():
-        alt_notes.append(f"No exact match found in {city} — showing nearest alternatives from other cities")
-    elif target_budget > 0:
-        alt_notes.append(
-            f"Showing venues within 150% of £{target_budget:,.0f} budget as closest alternatives"
-        )
-    if attendees > 0:
-        alt_notes.append(f"Venues accommodating at least 80% of your {attendees} guests are included")
-    if not alt_notes:
-        alt_notes.append("Showing closest available alternatives to your requirements")
+    if not venues:
+        # Honest empty result — guide the user to the live scraper
+        empty_summary = {
+            "total_venues": 0,
+            "best_venue": "None found in indexed database",
+            "budget_analysis": "No pre-indexed venues found for this city",
+            "capacity_analysis": "Use the live web scraper to find real local venues",
+            "key_recommendations": [
+                f"No venues for '{city}' are currently in the indexed database.",
+                "Use the 'Find Local Caterers & Hotels' section and click "
+                "'Search Web + Map for Nearby Vendors' to discover real local venues and hotels.",
+                "The web scraper searches DuckDuckGo + OpenStreetMap in real time "
+                "and indexes the results for your event.",
+            ],
+        }
+        return json.dumps({"venues": [], "summary": empty_summary, "is_fallback": True})
 
-    best = venues[0]["venue_name"] if venues else "No alternatives found"
+    alt_notes = [
+        f"These venues in or near {city} have relaxed budget/capacity matching applied.",
+    ]
+    if target_budget > 0:
+        alt_notes.append(f"Budget tolerance extended to £{target_budget * 1.5:,.0f} (150%)")
+    if attendees > 0:
+        alt_notes.append(f"Venues with at least 80% of {attendees}-guest capacity included")
+
+    best = venues[0]["venue_name"]
     summary = {
         "total_venues": len(venues),
         "best_venue": best,

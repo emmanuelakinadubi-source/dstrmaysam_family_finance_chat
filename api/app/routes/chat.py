@@ -17,8 +17,13 @@ async def chat_endpoint(request: ChatRequest):
 
     history = [{"role": m.role, "content": m.content} for m in (request.history or [])]
 
+    # Prepend event context block so agent knows about the uploaded draft
+    message = request.message
+    if request.event_context:
+        message = f"{request.event_context}\n\nUser question: {request.message}"
+
     result = chat_with_agent(
-        message=request.message,
+        message=message,
         knowledge_source=request.knowledge_source or "venue_master",
         history=history,
     )

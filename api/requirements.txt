@@ -34,6 +34,15 @@ openpyxl==3.1.5
 pandas==2.2.2
 numpy==2.0.1
 
+# ── Smart Vendor Scraper (web search + OSM + feedr.co) ────────────────────────
+duckduckgo-search==6.3.7    # automated URL discovery — free, no API key
+beautifulsoup4==4.12.3      # HTML parsing for scraped vendor pages
+lxml==5.2.2                 # faster BS4 parser
+playwright==1.47.0          # optional — only used for feedr.co; gracefully skipped if absent
+
+# ── Observability ──────────────────────────────────────────────────────────────
+langfuse>=4.0.0                 # LLM tracing — from langfuse.langchain import CallbackHandler (v4+)
+
 # ── Security ───────────────────────────────────────────────────────────────────
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
