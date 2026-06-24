@@ -4,88 +4,18 @@ on:
   push:
     branches: [main]
 
-# Prevent this workflow from running on feature branches even if the file
-# is evaluated there (e.g. during a merge that carries an older trigger).
 concurrency:
   group: cd-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_API: ghcr.io/${{ github.repository_owner }}/event-manager-api
-  IMAGE_UI: ghcr.io/${{ github.repository_owner }}/event-manager-ui
-
 jobs:
-  build-push:
-    name: Build & push images
-    # Hard guard — this job only runs when the ref is exactly main
-    if: github.ref == 'refs/heads/main'
+  build-push-deploy:
+    name: Build, push & deploy
+    # Runs only on main and only when the AWS_DEPLOY secret is set to 'true'
+    if: github.ref == 'refs/heads/main' && secrets.AWS_DEPLOY == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract metadata — API
-        id: meta-api
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_API }}
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest
-
-      - name: Build & push API image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: api/Dockerfile
-          push: true
-          tags: ${{ steps.meta-api.outputs.tags }}
-          labels: ${{ steps.meta-api.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract metadata — UI
-        id: meta-ui
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_UI }}
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest
-
-      - name: Build & push UI image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ui/Dockerfile
-          push: true
-          tags: ${{ steps.meta-ui.outputs.tags }}
-          labels: ${{ steps.meta-ui.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy:
-    name: Deploy to AWS ECS
-    runs-on: ubuntu-latest
-    needs: build-push
-    # Runs only when the AWS_DEPLOY Actions variable is set to 'true'
-    # Set it under repo Settings → Variables → Actions (not Secrets).
-    # Secrets cannot be compared reliably in if-conditions.
-    if: vars.AWS_DEPLOY == 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -96,22 +26,51 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: eu-west-2
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push API image to ECR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: api/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY_API }}:latest
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY_API }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push UI image to ECR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ui/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY_UI }}:latest
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY_UI }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Force new deployment — API
         run: |
           aws ecs update-service \
-            --cluster event-manager-cluster \
-            --service event-manager-api-svc \
-            --force-new-deployment
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE_API }} \
+            --force-new-deployment \
+            --region ${{ secrets.AWS_REGION }}
 
       - name: Force new deployment — UI
         run: |
           aws ecs update-service \
-            --cluster event-manager-cluster \
-            --service event-manager-ui-svc \
-            --force-new-deployment
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE_UI }} \
+            --force-new-deployment \
+            --region ${{ secrets.AWS_REGION }}

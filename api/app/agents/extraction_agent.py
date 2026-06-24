@@ -39,7 +39,7 @@ Field rules:
 - attendees: integer headcount, 0 if not mentioned
 - additional_requirements: list of strings for any special needs
 
-Return ONLY the JSON object."""
+Return ONLY the JSON object...."""
 
 
 def extract_requirements(text: str) -> EventRequirements:
