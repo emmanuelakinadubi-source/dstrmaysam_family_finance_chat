@@ -3,6 +3,8 @@ from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 from app.core.config import settings
 
+# When DATABASE_URL points at AWS RDS the URL already carries ?sslmode=require.
+# psycopg2 reads sslmode from the URL directly so no extra connect_args needed.
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
