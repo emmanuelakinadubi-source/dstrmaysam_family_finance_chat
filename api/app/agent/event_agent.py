@@ -13,50 +13,76 @@ from app.agent.tools.event_query_tool import search_event_requirements
 from app.agent.tools.extraction_tool import extract_event_requirements
 from app.agent.tools.nearby_venue_tool import find_nearby_venues
 from app.agent.tools.recommendation_tool import recommend_venues
+from app.agent.tools.vendor_intel_tool import search_nearby_vendors
 from app.agent.tools.venue_retrieval_tool import search_venues
 from app.core.config import settings
+from app.core.observability import make_langfuse_handler
 
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """You are an expert Corporate Event Planning AI Consultant operating as a unified Event Manager platform.
 
 ## Tools:
-1. extract_event_requirements — Parse raw text → structured event fields (call FIRST for event briefs)
+1. extract_event_requirements — Parse raw text → structured event fields (call FIRST for new event briefs)
 2. recommend_venues — Find and rank venues (40/20/15/10/10/5 scoring). Call after extraction.
 3. find_nearby_venues — Fallback with relaxed constraints. Call if recommend_venues returns 0 results or all scores < 40.
 4. search_venues — Semantic search over venue_master for specific venue questions.
-5. search_event_requirements — Query indexed event requirements from event_management or event_request_* collection.
+5. search_event_requirements — Query the user's indexed event brief from ChromaDB. Returns event details: postcode, city, attendees, budget, dietary needs, hotel needs, food categories.
 6. enrich_venue_details — Full operational details (parking, AV, transport) for a specific venue by ID.
 7. get_collection_stats — Collection health and indexing status.
+8. search_nearby_vendors — Search scraped local caterers and hotels near the event postcode (from vendor_intel ChromaDB collection).
+
+## CRITICAL — Draft/Event Context Awareness:
+When the message contains an [EVENT CONTEXT] block, the user has already uploaded an event brief.
+You MUST use this information. Do NOT ask the user to provide details they already submitted.
+
+**Trigger phrases that mean "use my uploaded draft":**
+"my draft", "my event", "my brief", "my document", "my requirements", "the event", "this event",
+"uploaded", "my company event", "match my event", "suit my event", "for my event"
+
+**When you see any of these triggers:**
+1. IMMEDIATELY call search_event_requirements using the collection from [EVENT CONTEXT] (or "event_management" as default)
+2. Use the retrieved data to answer the user's question
+3. Do NOT ask the user to re-provide details — the brief is already indexed
+
+**When user asks about food vendors / caterers / what fits their draft:**
+1. Call search_event_requirements to get event details (postcode, budget, diet categories)
+2. Call search_nearby_vendors with a query that includes the postcode and dietary needs
+3. Match vendor results against the event requirements and present ranked recommendations
 
 ## Knowledge Source Routing:
 Each chat message includes an [ACTIVE KNOWLEDGE SOURCE: ...] tag. Follow these rules strictly:
 
 ### [ACTIVE KNOWLEDGE SOURCE: venue_master]
 - Use search_venues to answer venue discovery questions
-- Use enrich_venue_details for detailed operational questions about a specific venue
+- Use enrich_venue_details for detailed venue questions
+- STILL call search_event_requirements first if user says "my draft/event/brief" — then match against venues
 - Answer: venue features, comparisons, capacity, pricing, location, parking, AV, transport
-- Do NOT call search_event_requirements
 
 ### [ACTIVE KNOWLEDGE SOURCE: event_management] or [ACTIVE KNOWLEDGE SOURCE: event_request_*]
 - FIRST call search_event_requirements with the collection name to get the user's event details
 - If search_event_requirements returns 0 results: inform the user they must first upload requirements via Event Manager
-- After getting event details, if the user asks for venue recommendations: call recommend_venues with the extracted event fields
+- After getting event details → call recommend_venues or search_nearby_vendors based on the question
 - If recommend_venues returns 0 venues or all scores < 40: call find_nearby_venues
-- Use search_venues for specific venue feature questions
-- Answer: event requirements Q&A, venue matching, budget analysis, suitability scores
 
-## Workflow for event briefs (process_event_requirements function):
+## Workflow for NEW event briefs (process_event_requirements function):
 1. extract_event_requirements (from raw text)
 2. recommend_venues (using extracted fields)
 3. find_nearby_venues (ONLY if step 2 returns 0 results or all scores < 40)
+4. If find_nearby_venues also returns 0 venues: this is acceptable — the indexed database
+   simply has no pre-indexed venues for that city. Tell the user to use the live web scraper.
+   NEVER suggest venues from a different city as a fallback.
 
 ## Critical rules:
-1. NEVER fabricate venue or event data — only use tool results
-2. NEVER return 0 venues without first calling find_nearby_venues
-3. Always cite match scores and specific venue attributes in recommendations
-4. For event_management queries: always call search_event_requirements first, then reason over results
-5. Include clear reasoning/explanation for every venue recommendation"""
+1. NEVER fabricate venue, vendor, or event data — only use tool results
+2. NEVER ask the user to re-provide details if an [EVENT CONTEXT] block is present
+3. NEVER suggest venues from a different city/region than the event location.
+   A conference in Chelmsford must ONLY receive Chelmsford/Essex venues — never London or Manchester.
+4. If no venues exist for the requested city in the database, return 0 and explain that the
+   live web-scraper tab will find real local hotels and venues.
+5. Always cite match scores and specific venue/vendor attributes in recommendations
+6. When matching food vendors: explicitly state how each vendor meets dietary requirements from the draft
+7. Always present distance and delivery status when recommending food vendors"""
 
 _TOOLS = [
     extract_event_requirements,
@@ -66,6 +92,7 @@ _TOOLS = [
     search_event_requirements,
     enrich_venue_details,
     get_collection_stats,
+    search_nearby_vendors,
 ]
 
 _executor: Optional[AgentExecutor] = None
@@ -106,11 +133,18 @@ def get_agent_executor() -> AgentExecutor:
 def process_event_requirements(raw_text: str) -> Dict[str, Any]:
     """Run agent on an event brief — extract + recommend. Used by the upload endpoint."""
     executor = get_agent_executor()
+    lf = make_langfuse_handler(
+        trace_name="process_event",
+        metadata={"raw_text_length": len(raw_text)},
+    )
     try:
-        result = executor.invoke({
-            "input": f"Process this event requirement brief and recommend venues:\n\n{raw_text[:6000]}",
-            "chat_history": [],
-        })
+        result = executor.invoke(
+            {
+                "input": f"Process this event requirement brief and recommend venues:\n\n{raw_text[:6000]}",
+                "chat_history": [],
+            },
+            config={"callbacks": [lf]} if lf else {},
+        )
     except Exception as exc:
         logger.error("Agent execution failed: %s", exc)
         return {
@@ -172,8 +206,16 @@ def chat_with_agent(
     # Prepend knowledge source tag so agent routes correctly
     tagged_message = f"[ACTIVE KNOWLEDGE SOURCE: {knowledge_source}]\n\n{message}"
 
+    lf = make_langfuse_handler(
+        trace_name="chat",
+        session_id=knowledge_source,   # group turns from the same event draft together
+        metadata={"knowledge_source": knowledge_source, "history_turns": len(history or [])},
+    )
     try:
-        result = executor.invoke({"input": tagged_message, "chat_history": lc_history})
+        result = executor.invoke(
+            {"input": tagged_message, "chat_history": lc_history},
+            config={"callbacks": [lf]} if lf else {},
+        )
     except Exception as exc:
         logger.error("Chat agent failed: %s", exc)
         return {

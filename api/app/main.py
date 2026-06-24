@@ -20,13 +20,14 @@ async def lifespan(app: FastAPI):
     try:
         from app.core.database import engine
         from app.db.base import Base
-        import app.models.budget  # noqa: F401
-        import app.models.vendor  # noqa: F401
-        import app.models.event   # noqa: F401
-        import app.models.upload  # noqa: F401
-        import app.models.chat    # noqa: F401
-        import app.models.report  # noqa: F401
-        import app.models.audit   # noqa: F401
+        import app.models.budget       # noqa: F401
+        import app.models.vendor       # noqa: F401
+        import app.models.event        # noqa: F401
+        import app.models.upload       # noqa: F401
+        import app.models.chat         # noqa: F401
+        import app.models.report       # noqa: F401
+        import app.models.audit        # noqa: F401
+        import app.models.event_draft  # noqa: F401
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified / created")
     except Exception as exc:
