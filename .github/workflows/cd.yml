@@ -11,8 +11,7 @@ concurrency:
 jobs:
   build-push-deploy:
     name: Build, push & deploy
-    # Runs only on main and only when the AWS_DEPLOY secret is set to 'true'
-    if: github.ref == 'refs/heads/main' && secrets.AWS_DEPLOY == 'true'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read

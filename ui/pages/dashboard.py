@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from ui.services import api_client as api
 
-st.set_page_config(page_title="Dashboard", layout="wide")
+st.set_page_config(page_title="Dashboard", page_icon="📊", layout="wide")
 st.title("📊 Company Event Planning — Dashboard")
 
 # ── Stats ──────────────────────────────────────────────────────────────────────
