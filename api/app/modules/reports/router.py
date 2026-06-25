@@ -1,4 +1,3 @@
-from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -14,7 +13,7 @@ def list_reports(db: Session = Depends(get_db)):
 
 @router.get("/family/summary")
 def family_summary(year: int, db: Session = Depends(get_db)):
-    from app.models.budget import MonthlyBudget, Expense
+    from app.models.budget import MonthlyBudget
     budgets = (
         db.query(MonthlyBudget)
         .filter(MonthlyBudget.year == year, MonthlyBudget.deleted_at.is_(None))

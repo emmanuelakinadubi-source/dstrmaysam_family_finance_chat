@@ -1,6 +1,5 @@
 import uuid
 from typing import List, Optional
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models.event import EventPlan
 from app.models.upload import UploadedFile

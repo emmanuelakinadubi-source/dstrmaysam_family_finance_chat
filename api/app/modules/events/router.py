@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.modules.events import repository as repo
 from app.modules.events.service import recommend_vendors_for_event
-from app.modules.events.schemas import EventPlanOut, VendorRecommendationsOut
+from app.modules.events.schemas import EventPlanOut
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/events", tags=["Events"])

@@ -4,7 +4,6 @@ given event requirements. Uses DB query tools to look up vendors and generate
 a natural-language explanation of recommendations.
 """
 import logging
-from typing import List, Optional
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.tools import tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder

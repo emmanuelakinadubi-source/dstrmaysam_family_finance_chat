@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.modules.family import repository as repo
-from app.modules.family.service import calculate_allocation, adjust_for_deficit
+from app.modules.family.service import calculate_allocation
 from app.modules.family.schemas import (
     BudgetCreate, BudgetOut, ExpenseCreate, ExpenseOut,
     IncomeInput, BudgetCalculation,

@@ -68,7 +68,6 @@ app.include_router(index_router, prefix="/api")
 # Extended platform modules (family, events, vendors, reports, analytics)
 try:
     from fastapi import APIRouter
-    from typing import Optional
     from pydantic import BaseModel as _BaseModel
     from app.modules.events.router import router as events_module_router
     from app.modules.family.router import router as family_router
