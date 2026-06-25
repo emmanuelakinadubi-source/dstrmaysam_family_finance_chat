@@ -47,6 +47,10 @@ langfuse>=4.0.0                 # LLM tracing — from langfuse.langchain import
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 
+# ── Evaluation (RAGAS) ─────────────────────────────────────────────────────────
+ragas>=0.2,<0.3
+datasets>=2.14
+
 # ── Testing ────────────────────────────────────────────────────────────────────
 pytest==8.3.2
 pytest-asyncio==0.23.8

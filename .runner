@@ -1,0 +1,11 @@
+﻿{
+  "agentId": 21,
+  "agentName": "EMMANUEL-ITC",
+  "poolId": 1,
+  "poolName": "Default",
+  "serverUrl": "https://pipelinesghubeus22.actions.githubusercontent.com/nUldIb7bKhtscYz8hw3KeBOHJWDgpHfh2BhrGo2Uy9Bm0kqeJd/",
+  "gitHubUrl": "https://github.com/emmanuelakinadubi-source/dstrmaysam_family_finance_chat",
+  "workFolder": "_work",
+  "useV2Flow": true,
+  "serverUrlV2": "https://broker.actions.githubusercontent.com/"
+}

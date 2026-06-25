@@ -93,7 +93,7 @@ def _build_event_context() -> str:
     return "\n".join(lines)
 
 
-def _call_chat_api(message: str, knowledge_source: str, history: list) -> dict:
+def _call_chat_api(message: str, knowledge_source: str, history: list, evaluate: bool = False) -> dict:
     try:
         event_context = _build_event_context()
         payload = {
@@ -101,13 +101,14 @@ def _call_chat_api(message: str, knowledge_source: str, history: list) -> dict:
             "knowledge_source": knowledge_source,
             "history": history,
             "event_context": event_context or None,
+            "evaluate": evaluate,
         }
-        resp = requests.post(f"{API_BASE}/api/chat", json=payload, timeout=120)
+        resp = requests.post(f"{API_BASE}/api/chat", json=payload, timeout=180)
         if resp.status_code == 200:
             return resp.json()
-        return {"answer": f"API error {resp.status_code}: {resp.text}", "sources": [], "knowledge_source": knowledge_source}
+        return {"answer": f"API error {resp.status_code}: {resp.text}", "sources": [], "knowledge_source": knowledge_source, "ragas_metrics": None}
     except Exception as exc:
-        return {"answer": f"Error: {exc}", "sources": [], "knowledge_source": knowledge_source}
+        return {"answer": f"Error: {exc}", "sources": [], "knowledge_source": knowledge_source, "ragas_metrics": None}
 
 
 def _call_reindex_api(full: bool = False) -> dict:
@@ -222,6 +223,51 @@ def _render_venue_grid(venues: list):
                 _render_venue_card(venue)
 
 
+# ─── RAGAS Metrics Renderer ───────────────────────────────────────────────────
+
+def _render_ragas_metrics(metrics: dict):
+    """Render RAGAS evaluation scores as a compact panel inside a chat message."""
+    if not metrics:
+        return
+    if metrics.get("error") and metrics["error"] not in ("no_contexts",):
+        st.caption(f"RAGAS: evaluation error — {metrics['error']}")
+        return
+    if metrics.get("error") == "no_contexts":
+        st.caption("RAGAS: no retrieved contexts to evaluate (direct knowledge answer)")
+        return
+
+    faith = metrics.get("faithfulness")
+    rel   = metrics.get("answer_relevancy")
+
+    with st.container(border=True):
+        st.caption("**RAGAS Evaluation**")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if faith is not None:
+                st.metric(
+                    label="Faithfulness",
+                    value=f"{faith:.0%}",
+                    help="How grounded is the answer in the retrieved chunks? "
+                         "High = answer stays close to what was retrieved.",
+                )
+                st.progress(float(faith))
+            else:
+                st.caption("Faithfulness: n/a")
+
+        with col2:
+            if rel is not None:
+                st.metric(
+                    label="Answer Relevancy",
+                    value=f"{rel:.0%}",
+                    help="How relevant is the answer to the question? "
+                         "High = answer directly addresses what was asked.",
+                )
+                st.progress(float(rel))
+            else:
+                st.caption("Answer Relevancy: n/a")
+
+
 # ─── Session State Init ───────────────────────────────────────────────────────
 
 if "venue_results" not in st.session_state:
@@ -243,6 +289,24 @@ tab_index, tab_events, tab_chat = st.tabs([
     "🏢 Event Manager",
     "💬 Chat",
 ])
+
+# ─── Sidebar — RAGAS toggle (persists across tab switches) ────────────────────
+with st.sidebar:
+    st.divider()
+    st.subheader("Evaluation")
+    ragas_enabled = st.toggle(
+        "Enable RAGAS Evaluation",
+        value=False,
+        key="ragas_enabled",
+        help=(
+            "After each chat reply, runs RAGAS to score:\n"
+            "- **Faithfulness** — is the answer grounded in retrieved chunks?\n"
+            "- **Answer Relevancy** — does the answer address the question?\n\n"
+            "Adds ~10–30 s per reply (extra LLM calls)."
+        ),
+    )
+    if ragas_enabled:
+        st.info("RAGAS active — metrics will appear below each reply.")
 
 
 # ════════════════════════════════════════════════════════════════
@@ -896,10 +960,12 @@ with tab_chat:
     # Each source maintains its own history
     current_history: list = st.session_state.chat_histories.get(source, [])
 
-    # Display existing history for this source
+    # Display existing history for this source (including any stored RAGAS metrics)
     for msg in current_history:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
+            if msg["role"] == "assistant" and msg.get("ragas_metrics"):
+                _render_ragas_metrics(msg["ragas_metrics"])
 
     user_input = st.chat_input(
         "Ask a question about venues or your event…",
@@ -907,23 +973,31 @@ with tab_chat:
     )
 
     if user_input:
-        # Snapshot history before appending the new message
+        # Snapshot history (role+content only) before appending the new message
         prev_history = [{"role": m["role"], "content": m["content"]} for m in current_history]
 
         # Show user message immediately
-        current_history.append({"role": "user", "content": user_input})
+        current_history.append({"role": "user", "content": user_input, "ragas_metrics": None})
         with st.chat_message("user"):
             st.write(user_input)
 
         # Call API with conversation history
+        ragas_flag = st.session_state.get("ragas_enabled", False)
         with st.chat_message("assistant"):
-            with st.spinner("Thinking…"):
-                reply = _call_chat_api(user_input, source, prev_history)
+            spinner_msg = "Thinking… (+ RAGAS evaluation)" if ragas_flag else "Thinking…"
+            with st.spinner(spinner_msg):
+                reply = _call_chat_api(user_input, source, prev_history, evaluate=ragas_flag)
             st.write(reply["answer"])
             if reply.get("sources"):
                 st.caption(f"Sources: {', '.join(reply['sources'])}")
+            if reply.get("ragas_metrics"):
+                _render_ragas_metrics(reply["ragas_metrics"])
 
-        current_history.append({"role": "assistant", "content": reply["answer"]})
+        current_history.append({
+            "role": "assistant",
+            "content": reply["answer"],
+            "ragas_metrics": reply.get("ragas_metrics"),
+        })
 
         # Persist per-source history
         st.session_state.chat_histories[source] = current_history

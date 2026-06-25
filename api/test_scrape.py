@@ -2,7 +2,7 @@
 import sys, requests, json, logging
 logging.basicConfig(level=logging.DEBUG)
 
-# ── 1. Overpass reachability ───────────────────────────────────────────────────
+# ── 1. Overpass reachability.. ───────────────────────────────────────────────────
 QUERY = '[out:json][timeout:30];(node["tourism"="hotel"](around:10000,51.7333,0.4658);way["tourism"="hotel"](around:10000,51.7333,0.4658););out center;'
 try:
     r = requests.post("https://overpass-api.de/api/interpreter",

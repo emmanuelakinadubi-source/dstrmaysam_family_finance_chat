@@ -90,12 +90,14 @@ class ChatRequest(BaseModel):
     knowledge_source: str = "venue_master"
     history: List[ChatMessage] = []
     event_context: Optional[str] = None   # Injected draft summary for the agent
+    evaluate: bool = False                # When True, run RAGAS evaluation and return metrics
 
 
 class ChatResponse(BaseModel):
     answer: str
     sources: List[str] = []
     knowledge_source: str = "venue_master"
+    ragas_metrics: Optional[Dict] = None  # Present only when evaluate=True was sent
 
 
 class IndexingMetadata(BaseModel):
