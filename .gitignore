@@ -17,3 +17,11 @@ build/
 *.doc
 *.pdf
 !user_story/**
+
+# GitHub Actions self-hosted runner — binary and credentials, never commit these
+actions-runner/
+actions-runner-win-x64-*.zip
+.credentials
+.credentials_rsaparams
+.runner
+_diag/
