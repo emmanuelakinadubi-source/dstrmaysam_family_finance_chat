@@ -122,3 +122,28 @@
 [2026-06-25 10:04:48Z INFO RunnerServer] EstablishVssConnection
 [2026-06-25 10:04:48Z INFO RunnerServer] Establish connection with 60 seconds timeout.
 [2026-06-25 10:04:48Z INFO GitHubActionsService] Starting operation Location.GetConnectionData
+[2026-06-25 10:04:49Z INFO GitHubActionsService] Finished operation Location.GetConnectionData
+[2026-06-25 10:04:49Z INFO GitHubActionsService] Finished operation Location.GetConnectionData
+[2026-06-25 10:04:49Z INFO GitHubActionsService] Finished operation Location.GetConnectionData
+[2026-06-25 10:04:49Z INFO BrokerMessageListener] VssConnection created
+[2026-06-25 10:04:49Z INFO Terminal] WRITE LINE: 
+[2026-06-25 10:04:49Z INFO Terminal] WRITE LINE: 
+[2026-06-25 10:04:49Z INFO RSAEncryptedFileKeyManager] Loading RSA key parameters from file C:\Users\emman\OneDrive\Desktop\DATA_SCIENCE_ITC\JUNE\DS_WK_3\dstrmaysam_family\family-finance-chat-app\actions-runner\.credentials_rsaparams
+[2026-06-25 10:04:49Z INFO RSAEncryptedFileKeyManager] Loading RSA key parameters from file C:\Users\emman\OneDrive\Desktop\DATA_SCIENCE_ITC\JUNE\DS_WK_3\dstrmaysam_family\family-finance-chat-app\actions-runner\.credentials_rsaparams
+[2026-06-25 10:04:49Z INFO GitHubActionsService] AAD Correlation ID for this token request: Unknown
+[2026-06-25 10:04:50Z INFO BrokerMessageListener] Session created.
+[2026-06-25 10:04:50Z INFO Terminal] WRITE LINE: Current runner version: '2.335.1'
+[2026-06-25 10:04:50Z INFO Terminal] WRITE LINE: 2026-06-25 10:04:50Z: Listening for Jobs
+[2026-06-25 10:04:50Z INFO JobDispatcher] Set runner/worker IPC timeout to 30 seconds.
+[2026-06-25 10:55:07Z INFO RSAEncryptedFileKeyManager] Loading RSA key parameters from file C:\Users\emman\OneDrive\Desktop\DATA_SCIENCE_ITC\JUNE\DS_WK_3\dstrmaysam_family\family-finance-chat-app\actions-runner\.credentials_rsaparams
+[2026-06-25 10:55:07Z INFO GitHubActionsService] AAD Correlation ID for this token request: Unknown
+[2026-06-25 11:45:40Z INFO RSAEncryptedFileKeyManager] Loading RSA key parameters from file C:\Users\emman\OneDrive\Desktop\DATA_SCIENCE_ITC\JUNE\DS_WK_3\dstrmaysam_family\family-finance-chat-app\actions-runner\.credentials_rsaparams
+[2026-06-25 11:45:41Z INFO GitHubActionsService] AAD Correlation ID for this token request: Unknown
+[2026-06-25 12:35:52Z INFO RSAEncryptedFileKeyManager] Loading RSA key parameters from file C:\Users\emman\OneDrive\Desktop\DATA_SCIENCE_ITC\JUNE\DS_WK_3\dstrmaysam_family\family-finance-chat-app\actions-runner\.credentials_rsaparams
+[2026-06-25 12:35:53Z INFO GitHubActionsService] AAD Correlation ID for this token request: Unknown
+[2026-06-25 13:26:09Z INFO RSAEncryptedFileKeyManager] Loading RSA key parameters from file C:\Users\emman\OneDrive\Desktop\DATA_SCIENCE_ITC\JUNE\DS_WK_3\dstrmaysam_family\family-finance-chat-app\actions-runner\.credentials_rsaparams
+[2026-06-25 13:26:10Z INFO GitHubActionsService] AAD Correlation ID for this token request: Unknown
+[2026-06-25 13:26:10Z WARN GitHubActionsService] Retrieving an AAD auth token took a long time (2.8128165 seconds)
+[2026-06-25 14:16:22Z INFO RSAEncryptedFileKeyManager] Loading RSA key parameters from file C:\Users\emman\OneDrive\Desktop\DATA_SCIENCE_ITC\JUNE\DS_WK_3\dstrmaysam_family\family-finance-chat-app\actions-runner\.credentials_rsaparams
+[2026-06-25 14:16:23Z INFO GitHubActionsService] AAD Correlation ID for this token request: Unknown
+[2026-06-25 14:16:23Z WARN GitHubActionsService] Retrieving an AAD auth token took a long time (2.3940528 seconds)
