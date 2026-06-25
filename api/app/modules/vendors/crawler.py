@@ -12,7 +12,6 @@ Data flow:
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Optional
 
 import requests
 

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 from app.models.budget import ALLOCATION_DEFAULTS, ADJUSTMENT_PRIORITY
 
 GROCERY_VENDORS = ["Tesco", "Aldi", "Lidl", "Asda", "Morrisons", "Sainsbury's"]

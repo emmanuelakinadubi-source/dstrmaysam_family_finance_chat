@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from app.models.budget import MonthlyBudget, Expense, BudgetAllocation, Saving
+from app.models.budget import MonthlyBudget, Expense, BudgetAllocation
 from app.modules.family.schemas import BudgetCreate, ExpenseCreate
 from app.modules.family.service import calculate_allocation
 import uuid

@@ -113,7 +113,7 @@ def crawl_schedule():
 
 # ── Smart event-aware scrape endpoint ─────────────────────────────────────────
 
-from pydantic import BaseModel as _BaseModel
+from pydantic import BaseModel as _BaseModel  # noqa: E402
 
 class _EventScrapeRequest(_BaseModel):
     postcode: str

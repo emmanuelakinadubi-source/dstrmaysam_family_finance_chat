@@ -8,7 +8,7 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 @router.get("/family/trends")
 def family_income_expense_trend(db: Session = Depends(get_db)):
-    from app.models.budget import MonthlyBudget, Expense
+    from app.models.budget import MonthlyBudget
 
     budgets = (
         db.query(MonthlyBudget)

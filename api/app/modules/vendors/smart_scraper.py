@@ -658,7 +658,6 @@ def _fsa_food_establishments(lat: float, lng: float, radius_km: float) -> List[S
                     v_lat, v_lng = coords
                     dist_km = round(haversine_km(lat, lng, v_lat, v_lng), 2)
 
-            btype = (est.get("BusinessType") or "").lower()
             vendor_type = "catering"
 
             vendors.append(ScrapedVendor(
@@ -836,7 +835,7 @@ def _overpass_nearby(lat: float, lng: float, radius_m: int, tags: List[str]) -> 
             blocks.append(f'  node[{t}](around:{radius_m},{lat},{lng});')
             blocks.append(f'  way[{t}](around:{radius_m},{lat},{lng});')
             blocks.append(f'  relation[{t}](around:{radius_m},{lat},{lng});')
-        query = f"[out:json][timeout:60];\n(\n" + "\n".join(blocks) + "\n);\nout center;"
+        query = "[out:json][timeout:60];\n(\n" + "\n".join(blocks) + "\n);\nout center;"
         els = _run_overpass(query, timeout_s=70)
         all_elements.extend(els)
         if i + batch_size < len(tags):
@@ -1034,8 +1033,6 @@ def run_event_scrape(config: EventScraperConfig) -> List[ScrapedVendor]:
 
     radius_m = int(min(config.radius_km, 100.0) * 1000)
     vendors: List[ScrapedVendor] = []
-
-    city = config.city or config.postcode
 
     # ── 1. FSA food business API (UK gov, always works, no rate limits) ──────
     if config.food_required:
