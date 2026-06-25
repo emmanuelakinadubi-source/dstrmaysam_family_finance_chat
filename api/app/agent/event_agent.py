@@ -224,22 +224,37 @@ def chat_with_agent(
             "knowledge_source": knowledge_source,
         }
 
-    sources = []
+    # Tools whose outputs contain text chunks suitable for RAGAS context evaluation
+    _RETRIEVAL_TOOLS = {"search_venues", "search_event_requirements", "search_nearby_vendors"}
+
+    sources: List[str] = []
+    contexts: List[str] = []
+
     for action, output in result.get("intermediate_steps", []):
+        tool_name = getattr(action, "tool", "")
         if not isinstance(output, str):
             continue
         try:
             data = json.loads(output)
+            # Collect venue/vendor names as citation sources
             for item in data.get("results", data.get("venues", [])):
                 if isinstance(item, dict):
                     name = item.get("venue_name", "")
                     if name and name not in sources:
                         sources.append(name)
+            # Collect text snippets from retrieval tools as RAGAS contexts
+            if tool_name in _RETRIEVAL_TOOLS:
+                for item in data.get("results", []):
+                    if isinstance(item, dict):
+                        snippet = item.get("snippet") or item.get("content") or item.get("text", "")
+                        if snippet and snippet not in contexts:
+                            contexts.append(snippet)
         except (json.JSONDecodeError, TypeError):
             pass
 
     return {
         "answer": result.get("output", ""),
         "sources": sources[:5],
+        "contexts": contexts[:10],  # top 10 chunks passed to RAGAS
         "knowledge_source": knowledge_source,
     }
