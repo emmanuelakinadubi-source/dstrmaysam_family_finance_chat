@@ -11,3 +11,9 @@ build/
 .mypy_cache/
 .streamlit/
 .DS_Store
+
+# Event brief test/sample documents — kept locally, not committed to the repo
+*.docx
+*.doc
+*.pdf
+!user_story/**
